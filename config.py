@@ -14,6 +14,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+@dataclass
+class CameraConfig:
+    """Per-camera configuration for multi-camera setups.
+
+    `source` is a camera device index (int) or any path/URL that OpenCV
+    can open (video file, RTSP stream, etc.).
+
+    For 3-D triangulation supply both `intrinsics` and `extrinsics`:
+      intrinsics  — 3×3 camera matrix K as 9 floats, row-major
+                    [fx, 0, cx,  0, fy, cy,  0, 0, 1]
+      extrinsics  — 4×4 world-to-camera transform as 16 floats, row-major
+    Leave both None to skip triangulation (cross-camera correlation still works).
+    """
+    source: int | str = 0
+    label: str = ""
+    frame_width: int = 1280
+    frame_height: int = 720
+    intrinsics: list[float] | None = None
+    extrinsics: list[float] | None = None
+
+    def __post_init__(self):
+        if not self.label:
+            self.label = f"cam_{self.source}"
+
+
 # --- Open-vocabulary prompts (YOLOE backend) --------------------------------
 # With the open-vocab backend we describe what to segment/classify in plain
 # words — so we can target DANGEROUS objects directly and even detect "hand"
@@ -62,10 +87,14 @@ class Thresholds:
 
 @dataclass
 class WatchdogConfig:
-    # --- capture ---
+    # --- capture (single-camera defaults; ignored when `cameras` is set) ---
     camera_index: int = 0
     frame_width: int = 1280
     frame_height: int = 720
+
+    # --- multi-camera: set this to run N camera streams in parallel ----------
+    # When empty the system falls back to single-camera mode using camera_index.
+    cameras: list[CameraConfig] = field(default_factory=list)
 
     # --- perception (layer 1) ------------------------------------------------
     # backend:
@@ -104,6 +133,18 @@ class WatchdogConfig:
     log_path: str = "watchdog_events.jsonl"
 
     thresholds: Thresholds = field(default_factory=Thresholds)
+
+    @property
+    def camera_configs(self) -> list[CameraConfig]:
+        """Canonical list of cameras: explicit multi-camera list or single-camera fallback."""
+        if self.cameras:
+            return self.cameras
+        return [CameraConfig(
+            source=self.camera_index,
+            label="camera_0",
+            frame_width=self.frame_width,
+            frame_height=self.frame_height,
+        )]
 
 
 CONFIG = WatchdogConfig()

@@ -60,6 +60,26 @@ SYSTEM = (
     "Reply only via the structured format."
 )
 
+MULTI_CAMERA_SYSTEM = (
+    "You are a GENERALIST safety watchdog observing a learning-based robot "
+    "operating in a home. You are an INDEPENDENT external observer — do not trust "
+    "what the robot intends; judge only what you observe.\n\n"
+    "You are seeing MULTIPLE SIMULTANEOUS CAMERA VIEWS. Each image is labeled "
+    "with its camera name. The cameras may:\n"
+    "  • cover the same scene from different angles (stereo / multi-view),\n"
+    "  • cover overlapping zones, or\n"
+    "  • monitor entirely different areas of the environment.\n\n"
+    "Your job across all views:\n"
+    "  1. Assess the OVERALL safety situation — the worst hazard anywhere wins.\n"
+    "  2. Use multi-angle evidence: an object seen in two cameras is more certain; "
+    "     a second view can reveal depth, trajectory, and occlusions invisible in one frame.\n"
+    "  3. Flag hazards visible only in ONE camera that might be missed by a single-camera system.\n"
+    "  4. If triangulated 3-D positions are provided, use them to judge proximity in real space.\n\n"
+    "Assess danger to PEOPLE first, then pets, then property. "
+    "Be decisive and calibrated: reserve 'critical' for imminent harm. "
+    "Reply only via the structured format."
+)
+
 
 @dataclass
 class Verdict:
@@ -115,6 +135,52 @@ class VLMJudge:
             )
         except Exception as e:  # network/API hiccup shouldn't crash the watchdog
             print(f"[vlm] error: {e}")
+            return None
+        text = next((b.text for b in resp.content if b.type == "text"), None)
+        if not text:
+            return None
+        try:
+            return Verdict.from_json(json.loads(text))
+        except json.JSONDecodeError:
+            return None
+
+    def judge_multi(
+        self,
+        frames_bgr: list[np.ndarray],
+        cam_labels: list[str],
+        facts: str,
+    ) -> Verdict | None:
+        """Holistic safety judgment across multiple simultaneous camera views.
+
+        Each frame is sent as a separate image block (full resolution) with its
+        camera label so the model can reason about cross-view evidence and depth.
+        """
+        if self.client is None or not frames_bgr:
+            return None
+        content: list[dict] = []
+        for frame, label in zip(frames_bgr, cam_labels):
+            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            if not ok:
+                continue
+            b64 = base64.standard_b64encode(buf.tobytes()).decode("utf-8")
+            content.append({"type": "text", "text": f"[{label}]"})
+            content.append({"type": "image", "source": {
+                "type": "base64", "media_type": "image/jpeg", "data": b64}})
+        if not content:
+            return None
+        content.append({"type": "text", "text":
+            f"Cross-camera facts ({len(frames_bgr)} cameras):\n" + facts +
+            "\n\nJudge the full scene across all cameras."})
+        try:
+            resp = self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                system=MULTI_CAMERA_SYSTEM,
+                output_config={"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
+                messages=[{"role": "user", "content": content}],
+            )
+        except Exception as e:
+            print(f"[vlm_multi] error: {e}")
             return None
         text = next((b.text for b in resp.content if b.type == "text"), None)
         if not text:
