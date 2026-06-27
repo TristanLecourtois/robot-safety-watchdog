@@ -11,12 +11,19 @@ matches the OpenARM/LeRobot methods used by `OpenArmLeRobotAdapter`.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from harness import JsonlAuditLogger, OpenArmLeRobotAdapter, RuntimeWatchdogSupervisor, safe_execute
+from harness import (
+    JsonlAuditLogger,
+    LeRobotOpenArmController,
+    OpenArmLeRobotAdapter,
+    RuntimeWatchdogSupervisor,
+    safe_execute,
+)
 
 
 SAFE_SCENE = {
@@ -82,7 +89,163 @@ class MockOpenArmController:
         return {"connected": True, "mode": "mock"}
 
 
-def build_openarm_controller(use_real_openarm: bool) -> Any:
+@dataclass
+class MockLeRobotRobot:
+    """Small stand-in for a LeRobot robot object, without OpenARM hardware."""
+
+    calls: list[tuple[str, Any]] = field(default_factory=list)
+    action_features: dict[str, Any] = field(
+        default_factory=lambda: {
+            "left_shoulder_pan.pos": {},
+            "right_shoulder_pan.pos": {},
+        }
+    )
+
+    def send_action(self, action: dict[str, Any]) -> None:
+        self.calls.append(("send_action", action))
+
+    def get_observation(self) -> dict[str, float]:
+        self.calls.append(("get_observation", None))
+        return {
+            "left_shoulder_pan.pos": 0.1,
+            "right_shoulder_pan.pos": -0.1,
+        }
+
+    def disconnect(self) -> None:
+        self.calls.append(("disconnect", None))
+
+
+@dataclass
+class MockLeRobotInference:
+    """Stand-in for a LeRobot inference engine with pause/resume hooks."""
+
+    calls: list[tuple[str, Any]] = field(default_factory=list)
+
+    def pause(self) -> None:
+        self.calls.append(("pause", None))
+
+    def resume(self) -> None:
+        self.calls.append(("resume", None))
+
+    def reset(self) -> None:
+        self.calls.append(("reset", None))
+
+    def stop(self) -> None:
+        self.calls.append(("stop", None))
+
+
+@dataclass
+class SmokeControllerBundle:
+    controller: Any
+    debug_objects: dict[str, Any] = field(default_factory=dict)
+
+
+def build_real_lerobot_bundle() -> SmokeControllerBundle:
+    """Import the real LeRobot package and run the harness on a fake Robot subclass."""
+    try:
+        import lerobot
+        from lerobot.robots import Robot, RobotConfig
+    except Exception as exc:
+        raise RuntimeError(
+            "LeRobot is not importable in this Python environment. Install LeRobot first, "
+            "then rerun: python3 -m harness.openarm_smoke --real-lerobot"
+        ) from exc
+
+    @dataclass
+    class SmokeLeRobotConfig(RobotConfig):
+        type: str = "smoke_lerobot"
+
+    class SmokeLeRobotRobot(Robot):
+        config_class = SmokeLeRobotConfig
+        name = "smoke_lerobot"
+
+        def __init__(self, config: SmokeLeRobotConfig):
+            super().__init__(config)
+            self.calls: list[tuple[str, Any]] = []
+            self._connected = False
+
+        @property
+        def observation_features(self) -> dict:
+            return {
+                "left_shoulder_pan.pos": float,
+                "right_shoulder_pan.pos": float,
+            }
+
+        @property
+        def action_features(self) -> dict:
+            return {
+                "left_shoulder_pan.pos": float,
+                "right_shoulder_pan.pos": float,
+            }
+
+        @property
+        def is_connected(self) -> bool:
+            return self._connected
+
+        @property
+        def is_calibrated(self) -> bool:
+            return True
+
+        def connect(self, calibrate: bool = True) -> None:
+            self.calls.append(("connect", {"calibrate": calibrate}))
+            self._connected = True
+
+        def calibrate(self) -> None:
+            self.calls.append(("calibrate", None))
+
+        def configure(self) -> None:
+            self.calls.append(("configure", None))
+
+        def get_observation(self) -> dict[str, float]:
+            self.calls.append(("get_observation", None))
+            return {
+                "left_shoulder_pan.pos": 0.1,
+                "right_shoulder_pan.pos": -0.1,
+            }
+
+        def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
+            self.calls.append(("send_action", action))
+            return action
+
+        def disconnect(self) -> None:
+            self.calls.append(("disconnect", None))
+            self._connected = False
+
+    try:
+        config = SmokeLeRobotConfig(id="smoke_lerobot")
+    except TypeError:
+        config = SmokeLeRobotConfig()
+
+    robot = SmokeLeRobotRobot(config)
+    robot.connect(calibrate=False)
+    inference = MockLeRobotInference()
+    controller = LeRobotOpenArmController(
+        robot=robot,
+        inference_engine=inference,
+        stop_mode="hold",
+    )
+    version = getattr(lerobot, "__version__", None)
+    if version is None:
+        try:
+            version = importlib.metadata.version("lerobot")
+        except importlib.metadata.PackageNotFoundError:
+            version = "unknown"
+
+    return SmokeControllerBundle(
+        controller=controller,
+        debug_objects={
+            "real_lerobot_module": {"version": version, "module": str(lerobot)},
+            "real_lerobot_robot": robot,
+            "real_lerobot_inference": inference,
+        },
+    )
+
+
+def build_openarm_controller(
+    use_real_openarm: bool,
+    use_mock_lerobot: bool = False,
+    use_real_lerobot: bool = False,
+) -> SmokeControllerBundle:
     """Replace this function with your real OpenARM/LeRobot construction.
 
     Expected surface:
@@ -95,8 +258,25 @@ def build_openarm_controller(use_real_openarm: bool) -> Any:
     If your real object exposes `send_action`, `play_trajectory`, or
     `replay_trajectory` instead, `OpenArmLeRobotAdapter` can use those too.
     """
+    if use_real_lerobot:
+        return build_real_lerobot_bundle()
+
+    if use_mock_lerobot:
+        robot = MockLeRobotRobot()
+        inference = MockLeRobotInference()
+        controller = LeRobotOpenArmController(
+            robot=robot,
+            inference_engine=inference,
+            stop_mode="hold",
+        )
+        return SmokeControllerBundle(
+            controller=controller,
+            debug_objects={"mock_lerobot_robot": robot, "mock_lerobot_inference": inference},
+        )
+
     if not use_real_openarm:
-        return MockOpenArmController()
+        controller = MockOpenArmController()
+        return SmokeControllerBundle(controller=controller, debug_objects={"mock_controller": controller})
 
     raise NotImplementedError(
         "Edit build_openarm_controller() in harness/openarm_smoke.py to return "
@@ -163,14 +343,34 @@ def main() -> None:
         help="call build_openarm_controller(True); edit that function first",
     )
     parser.add_argument(
+        "--mock-lerobot",
+        action="store_true",
+        help="test the LeRobotOpenArmController path with fake send_action/get_observation objects",
+    )
+    parser.add_argument(
+        "--real-lerobot",
+        action="store_true",
+        help="import the real lerobot package and test the harness with a fake lerobot.robots.Robot subclass",
+    )
+    parser.add_argument(
         "--log",
         type=Path,
         default=None,
         help="JSONL audit log path; defaults to a temporary file",
     )
     args = parser.parse_args()
+    if sum([args.real_openarm, args.mock_lerobot, args.real_lerobot]) > 1:
+        parser.error("choose only one of --real-openarm, --mock-lerobot, or --real-lerobot")
 
-    controller = build_openarm_controller(args.real_openarm)
+    try:
+        bundle = build_openarm_controller(
+            args.real_openarm,
+            use_mock_lerobot=args.mock_lerobot,
+            use_real_lerobot=args.real_lerobot,
+        )
+    except RuntimeError as exc:
+        parser.exit(2, f"error: {exc}\n")
+    controller = bundle.controller
     robot = OpenArmLeRobotAdapter(controller=controller)
     log_path = args.log or Path(tempfile.gettempdir()) / "openarm_harness_smoke.jsonl"
 
@@ -181,6 +381,13 @@ def main() -> None:
     calls = getattr(controller, "calls", None)
     if calls is not None:
         print(f"controller calls:           {calls}")
+    for name, obj in bundle.debug_objects.items():
+        if isinstance(obj, dict):
+            print(f"{name}:     {obj}")
+            continue
+        debug_calls = getattr(obj, "calls", None)
+        if debug_calls is not None:
+            print(f"{name} calls:    {debug_calls}")
     print(f"audit log:                  {log_path}")
 
 

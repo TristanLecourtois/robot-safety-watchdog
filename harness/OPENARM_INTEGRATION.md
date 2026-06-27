@@ -5,42 +5,200 @@ This is the minimal integration guide for plugging the harness into an OpenARM s
 LeRobot `main` inspection reference used for this guide:
 `3dd19d043e2f3fe5673b13ea0ebe4f31884c0797`.
 
-## 0. Fresh-Clone Smoke Test
+## 0. Fresh Clone To LeRobot Integration Test
 
-After cloning the repository on another machine, run the harness-only smoke test:
+This section explains how to test the harness integration from a fresh clone,
+including the real LeRobot Python package, without connecting OpenARM hardware.
+
+You do not need a robot-side policy model for these tests. The smoke test uses:
+
+- deterministic harness policies from `harness/policy.py`;
+- fake perception outputs that simulate safe and dangerous scenes;
+- either a fake controller, a fake LeRobot-shaped robot, or the real LeRobot
+  package with a fake `lerobot.robots.Robot` subclass.
+
+### 0.1 Clone The Watchdog Repo
 
 ```bash
-git clone <your-repo-url>
-cd robot-safety-watchdog
+cd ~
+git clone <your-watchdog-repo-url> robot-safety-watchdog
+cd ~/robot-safety-watchdog
+```
+
+If you are already inside `~/robot-safety-watchdog`, do not run
+`cd robot-safety-watchdog` again. That would try to enter
+`~/robot-safety-watchdog/robot-safety-watchdog`.
+
+### 0.2 First Test: Harness Only
+
+Run:
+
+```bash
 python3 -m harness.openarm_smoke
 ```
 
-This test does not require a camera, YOLO model, or real OpenARM hardware. It
-uses scripted scene contexts to verify that:
+This does not import LeRobot and does not use OpenARM. It only verifies:
 
-- an unsafe planned sharp-tool action returns `BLOCK` and is not executed;
-- a safe planned action returns `ALLOW` and reaches the controller adapter;
-- runtime danger returns `PAUSE`;
-- two safe runtime frames trigger `RESUME`;
-- JSONL audit events are written.
+- dangerous scene -> `BLOCK`;
+- safe scene -> `ALLOW`;
+- runtime danger -> `PAUSE`;
+- safe frames after pause -> `RESUME`;
+- the adapter calls a mock controller.
 
-You do not need a robot-side policy model for this test. The smoke test uses the
-deterministic harness policies from `harness/policy.py` and fake perception
-outputs. OpenARM only needs to expose a Python control object that the harness
-can call.
+Expected important output:
 
-To test with the real OpenARM controller, edit
-`harness/openarm_smoke.py`, replace `build_openarm_controller()` with your
-LeRobot/OpenARM setup, then run:
+```text
+command gate unsafe scene: BLOCK
+command gate safe scene:   ALLOW
+runtime frame 0:          PAUSE -> mode=PAUSED
+runtime frame 2:          ALLOW -> mode=RUNNING, resume
+controller calls:           [('execute', ...), ('pause', ...), ('resume', ...)]
+```
+
+### 0.3 Second Test: LeRobot-Shaped Interface, No LeRobot Package
+
+Run:
 
 ```bash
-python3 -m harness.openarm_smoke --real-openarm --log harness_events.jsonl
+python3 -m harness.openarm_smoke --mock-lerobot
+```
+
+This still does not import the real LeRobot package. It uses the harness
+`LeRobotOpenArmController` with fake objects exposing the methods expected from
+LeRobot:
+
+- `send_action()`;
+- `get_observation()`;
+- inference `pause()`;
+- inference `reset()`;
+- inference `resume()`.
+
+Expected important output:
+
+```text
+mock_lerobot_robot calls:
+[('send_action', ...), ('get_observation', None), ('send_action', ...)]
+
+mock_lerobot_inference calls:
+[('pause', None), ('reset', None), ('resume', None)]
+```
+
+This validates the shape of the interface that OpenARM/LeRobot must expose.
+
+### 0.4 Setup The Real LeRobot Package
+
+If LeRobot is already cloned, for example:
+
+```bash
+/home/rached/openarm/lerobot
+```
+
+activate its environment:
+
+```bash
+source /home/rached/openarm/lerobot/.venv/bin/activate
+```
+
+Then verify that Python can import LeRobot:
+
+```bash
+python -c "import lerobot; print(getattr(lerobot, '__version__', 'unknown')); print(lerobot.__file__)"
+```
+
+Expected output should point to something like:
+
+```text
+/home/rached/openarm/lerobot/src/lerobot/__init__.py
+```
+
+If this import fails, either install LeRobot in the active environment:
+
+```bash
+cd /home/rached/openarm/lerobot
+python -m pip install -e .
+```
+
+or temporarily expose the source checkout:
+
+```bash
+export PYTHONPATH=/home/rached/openarm/lerobot/src:$PYTHONPATH
+```
+
+For a stable LeRobot install, the official docs list:
+
+```bash
+python -m pip install lerobot
+```
+
+If you are working against LeRobot `main`, prefer the editable source checkout
+used by your OpenARM setup.
+
+### 0.5 Third Test: Real LeRobot Package, No OpenARM Hardware
+
+From the watchdog repo, with the LeRobot environment still active:
+
+```bash
+cd /home/rached/robot-safety-watchdog
+python -m harness.openarm_smoke --real-lerobot
+```
+
+This imports the real `lerobot` package, creates a tiny fake robot subclass from
+`lerobot.robots.Robot`, and runs it through `LeRobotOpenArmController`. It does
+not connect to OpenARM hardware.
+
+Expected important output:
+
+```text
+real_lerobot_module:
+{'version': '...', 'module': "<module 'lerobot' from '.../src/lerobot/__init__.py'>"}
+
+real_lerobot_robot calls:
+[('connect', ...), ('send_action', ...), ('get_observation', None), ('send_action', ...)]
+
+real_lerobot_inference calls:
+[('pause', None), ('reset', None), ('resume', None)]
+```
+
+This validates:
+
+- the real LeRobot package is importable;
+- the harness can work with a real LeRobot `Robot` base interface;
+- `ALLOW` reaches `send_action()`;
+- `PAUSE` reaches inference `pause()` and robot `get_observation()`;
+- hold-position action is sent back through `send_action()`;
+- `RESUME` reaches inference `reset()` and `resume()`.
+
+At this point the tested path is:
+
+```text
+simulated vision danger
+-> harness policy
+-> RuntimeWatchdogSupervisor / safe_execute
+-> OpenArmLeRobotAdapter
+-> LeRobotOpenArmController
+-> real LeRobot package
+-> fake LeRobot robot, no OpenARM hardware
+```
+
+### 0.6 Final Test: Real OpenARM Controller
+
+Only after the real-LeRobot test passes, edit `harness/openarm_smoke.py` and
+replace `build_openarm_controller()` with your real LeRobot/OpenARM setup. Then
+run:
+
+```bash
+cd /home/rached/robot-safety-watchdog
+python -m harness.openarm_smoke --real-openarm --log harness_events.jsonl
 ```
 
 The controller object should expose at least one execution method, for example
 `execute`, `send_action`, `play_trajectory`, or `replay_trajectory`. For runtime
 interaction tests, also expose `pause`, `resume`, and `stop` or
 `emergency_stop`.
+
+For a first hardware run, make the OpenARM action neutral or very small. The
+smoke test intentionally sends a safe `ALLOW` case, so a real controller may
+receive a real command.
 
 ## 1. What Works Now
 
