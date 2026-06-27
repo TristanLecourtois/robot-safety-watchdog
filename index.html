@@ -209,14 +209,14 @@
       </div>
       <div class="body">
         <div class="feed" id="feed-gripper">
-          <video src="gripper.mp4" muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <video src="gripper.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
           <div class="info">Camera: gripper_cam<br>Resolution: 1280×720<br>FPS: 30</div>
           <div class="name"><i></i> GRIPPER CAM</div>
           <div class="danger-frame"></div>
           <div class="mode-tag"></div>
         </div>
         <div class="feed" id="feed-head">
-          <video src="head.mp4" muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <video src="head.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
           <div class="info">Camera: head_cam<br>Resolution: 640×480<br>FPS: 30</div>
           <div class="name"><i></i> HEAD CAM</div>
           <div class="danger-frame"></div>
@@ -337,22 +337,18 @@
   vids.forEach((v) => { v.addEventListener("canplay", maybeStart); v.addEventListener("canplaythrough", maybeStart); });
   setTimeout(startFeeds, 2500);  // fallback: start no matter what
   function pickMaster() {
-    if (vids.every((v) => v.duration && v.readyState >= 1)) {
-      master = vids.reduce((a, b) => (a.duration < b.duration ? a : b));
-      return true;
-    }
-    return false;
+    if (!master && vids.every((v) => v.duration && v.readyState >= 1)) master = vids[0];
+    return !!master;
   }
+  // gentle resync: only nudge if drift is LARGE, and rarely — no per-second seeking
   setInterval(() => {
-    if (!master && !pickMaster()) return;
+    if (!master) return;
     vids.forEach((v) => {
       if (v === master || !v.duration) return;
-      if (master.currentTime < v.duration && Math.abs(v.currentTime - master.currentTime) > 0.15)
-        v.currentTime = master.currentTime;
-      if (!started) return;
       if (v.paused) v.play().catch(() => {});
+      if (Math.abs(v.currentTime - master.currentTime) > 0.7) v.currentTime = master.currentTime;
     });
-  }, 1200);
+  }, 5000);
   const waitMaster = setInterval(() => { if (master || pickMaster()) { clearInterval(waitMaster); initLogs(); } }, 300);
   setTimeout(() => initLogs(), 4000);
 
@@ -401,18 +397,9 @@
   }
   setInterval(updateFutures, 1600); updateFutures();
 
-  // roll the future feeds forward by the horizon so they show the UPCOMING
-  // frames (the recorded "ground-truth future"), drift-corrected ~1s.
-  setInterval(() => {
-    if (!master || !master.duration) return;
-    futEls.forEach((el) => {
-      const v = el.querySelector("video");
-      if (!v.duration) return;
-      const target = (master.currentTime + horizonSec) % v.duration;
-      if (Math.abs(v.currentTime - target) > 0.4) v.currentTime = target;
-      if (v.paused) v.play().catch(() => {});
-    });
-  }, 1000);
+  // futures just play (autoplay/loop); the "prediction" is conveyed by the
+  // danger coloring from severityAt(currentTime + horizon) — no per-second
+  // seeking (that caused the feeds to thrash/loop).
 
   // ---- latent "encode -> decode" reconstruction render for the 3 futures ----
   // Downsample each frame to a small latent grid (encode), quantize + add noise
