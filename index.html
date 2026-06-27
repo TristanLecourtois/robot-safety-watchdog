@@ -358,24 +358,51 @@
 
   // ---- latent futures (red/green) ----
   const futEls = [0, 1, 2].map((i) => document.getElementById("fut-" + i));
+  let horizonSec = 1.5;          // shared prediction horizon (from the slider)
+  window.logsData = null;        // VLM timeline, used to predict future danger
+
   function setFut(el, lvl) {
     el.classList.remove("safe", "warning", "danger");
     el.classList.add(lvl);
     el.querySelector(".pill").textContent = lvl.toUpperCase();
   }
+  // severity the world model "expects" at a future time (from the VLM timeline)
+  function severityAt(t) {
+    const d = window.logsData;
+    if (!d || !d.length) return curSev;          // fallback to current danger
+    let sev = "info";
+    for (const e of d) { if (e.t <= t) sev = e.severity; else break; }
+    return sev === "info" ? null : sev;
+  }
   function updateFutures() {
-    // independent rollouts at the SAME horizon — each branch samples its own
-    // outcome, so some futures come out safe and others dangerous.
+    // Predict at currentTime + horizon: independent rollouts at the SAME horizon,
+    // each branch samples its own outcome -> some come out safe, some dangerous,
+    // and they flag danger BEFORE the live feed reaches it.
+    const tf = (master && master.duration) ? (master.currentTime + horizonSec) : 0;
+    const base = severityAt(tf);
     futEls.forEach((el) => {
       const r = Math.random();
       let lvl;
-      if (curSev === "critical") lvl = r < 0.6 ? "danger" : (r < 0.85 ? "warning" : "safe");
-      else if (curSev === "warning") lvl = r < 0.35 ? "warning" : (r < 0.5 ? "danger" : "safe");
+      if (base === "critical") lvl = r < 0.6 ? "danger" : (r < 0.85 ? "warning" : "safe");
+      else if (base === "warning") lvl = r < 0.35 ? "warning" : (r < 0.5 ? "danger" : "safe");
       else lvl = r < 0.1 ? "warning" : "safe";
       setFut(el, lvl);
     });
   }
   setInterval(updateFutures, 1600); updateFutures();
+
+  // roll the future feeds forward by the horizon so they show the UPCOMING
+  // frames (the recorded "ground-truth future"), drift-corrected ~1s.
+  setInterval(() => {
+    if (!master || !master.duration) return;
+    futEls.forEach((el) => {
+      const v = el.querySelector("video");
+      if (!v.duration) return;
+      const target = (master.currentTime + horizonSec) % v.duration;
+      if (Math.abs(v.currentTime - target) > 0.4) v.currentTime = target;
+      if (v.paused) v.play().catch(() => {});
+    });
+  }, 1000);
 
   // ---- latent "encode -> decode" reconstruction render for the 3 futures ----
   // Downsample each frame to a small latent grid (encode), quantize + add noise
@@ -425,6 +452,7 @@
   hzR.addEventListener("input", () => {
     const v = (hzR.value / 10).toFixed(1) + "s";
     hz.textContent = v;
+    horizonSec = hzR.value / 10;
     document.querySelectorAll(".fhz").forEach((e) => (e.textContent = "+" + v));
   });
 
@@ -523,6 +551,7 @@
     try { const r = await fetch("logs.json", { cache: "no-store" }); if (r.ok) data = await r.json(); } catch (e) {}
     if (!data || !data.length) { fakeLoop(); buildTimeline(syntheticTimeline()); return; }
     data.sort((a, b) => a.t - b.t);
+    window.logsData = data;       // feed the predictive future rollouts
     buildTimeline(data);
     let ptr = 0, prevT = 0;
     setInterval(() => {
