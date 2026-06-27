@@ -10,10 +10,22 @@ dependencies = [
     "opencv-python>=4.9",
     "ultralytics>=8.3",
     "anthropic>=0.69",
-    "numpy>=1.26",
+    # torch 2.2.2 was built against NumPy 1.x; NumPy 2.x breaks its C-API interop.
+    "numpy>=1.26,<2",
     "python-dotenv>=1.0",
-    "mediapipe>=0.10",
+    # torch/torchvision dropped macOS Intel (x86_64) wheels after 2.2.2 / 0.17.2.
+    # Pin to the last versions with universal wheels so the project installs on
+    # Intel Macs too (still satisfies ultralytics' torch>=1.8).
+    "torch>=2.0,<2.3",
+    "torchvision>=0.15,<0.18",
 ]
+
+[project.optional-dependencies]
+# Fingertip-level precision. No wheels for macOS Intel (x86_64) — install with
+# `uv run --extra hands main.py` on arm64 macOS / Linux / Windows. Without it,
+# the watchdog falls back to person-box proximity (everything else still runs,
+# including blade orientation/tip from the YOLO mask).
+hands = ["mediapipe>=0.10"]
 
 [project.scripts]
 watchdog = "main:main"
