@@ -209,14 +209,14 @@
       </div>
       <div class="body">
         <div class="feed" id="feed-gripper">
-          <video src="gripper.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <video src="gripper.mp4" muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
           <div class="info">Camera: gripper_cam<br>Resolution: 1280×720<br>FPS: 30</div>
           <div class="name"><i></i> GRIPPER CAM</div>
           <div class="danger-frame"></div>
           <div class="mode-tag"></div>
         </div>
         <div class="feed" id="feed-head">
-          <video src="head.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <video src="head.mp4" muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
           <div class="info">Camera: head_cam<br>Resolution: 640×480<br>FPS: 30</div>
           <div class="name"><i></i> HEAD CAM</div>
           <div class="danger-frame"></div>
@@ -326,7 +326,16 @@
   // ---- synchronized playback of the 2 top feeds ----
   let master = null, curSev = null;
   const vids = [...document.querySelectorAll(".feed video")];
-  vids.forEach((v) => v.play().catch(() => {}));
+  // coordinated start: wait until both feeds can play, then start at t=0 together
+  let started = false;
+  function startFeeds() {
+    if (started) return; started = true;
+    vids.forEach((v) => { try { v.currentTime = 0; } catch (e) {} });
+    Promise.all(vids.map((v) => v.play().catch(() => {})));
+  }
+  function maybeStart() { if (!started && vids.every((v) => v.readyState >= 3)) startFeeds(); }
+  vids.forEach((v) => { v.addEventListener("canplay", maybeStart); v.addEventListener("canplaythrough", maybeStart); });
+  setTimeout(startFeeds, 2500);  // fallback: start no matter what
   function pickMaster() {
     if (vids.every((v) => v.duration && v.readyState >= 1)) {
       master = vids.reduce((a, b) => (a.duration < b.duration ? a : b));
@@ -338,8 +347,9 @@
     if (!master && !pickMaster()) return;
     vids.forEach((v) => {
       if (v === master || !v.duration) return;
-      if (master.currentTime < v.duration && Math.abs(v.currentTime - master.currentTime) > 0.3)
+      if (master.currentTime < v.duration && Math.abs(v.currentTime - master.currentTime) > 0.15)
         v.currentTime = master.currentTime;
+      if (!started) return;
       if (v.paused) v.play().catch(() => {});
     });
   }, 1200);
