@@ -24,7 +24,7 @@ from src.vlm_judge import VLMJudge, Verdict
 class Watchdog:
     def __init__(self, config: cfg.WatchdogConfig = cfg.CONFIG):
         self.cfg = config
-        self.detector = Detector(config.yolo_model, config.thresholds.min_confidence)
+        self.detector = Detector.build(config)
         self.hands = HandTracker() if config.use_hand_landmarks else None
         self.rules = RuleEngine(config.thresholds)
         self.vlm = VLMJudge(config.vlm_model)

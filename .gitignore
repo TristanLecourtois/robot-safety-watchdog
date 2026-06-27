@@ -4,5 +4,8 @@ __pycache__/
 venv/
 .env
 *.pt
+*.ts
+mobileclip*
+.textpe_cache.pt
 watchdog_events.jsonl
 .DS_Store

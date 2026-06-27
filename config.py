@@ -14,16 +14,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# --- Objects we care about in a kitchen scene (COCO class names from YOLO) ---
-# COCO doesn't have "stove" or "robot arm", so for the hackathon we proxy:
-#   - knife/scissors      -> sharp hazard
-#   - person/hand(proxy)  -> the human at risk
-#   - cup/bowl/wine glass -> fragile / spill hazard
-#   - oven/microwave      -> hot zone (static)
-SHARP_CLASSES = {"knife", "scissors", "fork"}
-HUMAN_CLASSES = {"person"}
-FRAGILE_CLASSES = {"cup", "wine glass", "bowl", "bottle"}
-HOT_ZONE_CLASSES = {"oven", "microwave", "toaster"}
+# --- Open-vocabulary prompts (YOLOE backend) --------------------------------
+# With the open-vocab backend we describe what to segment/classify in plain
+# words — so we can target DANGEROUS objects directly and even detect "hand"
+# without MediaPipe. Edit this list freely; YOLOE will segment + classify each.
+OPEN_VOCAB_PROMPTS = [
+    # people & pets at risk
+    "person", "hand", "child", "dog", "cat",
+    # sharp hazards
+    "knife", "kitchen knife", "cleaver", "scissors", "fork",
+    # fragile / spill
+    "cup", "mug", "glass", "bottle", "bowl", "plate", "wine glass",
+    # hot zones / fire
+    "pot", "pan", "frying pan", "stove", "gas stove", "oven", "microwave",
+    "kettle", "flame", "fire", "boiling water",
+    # robot
+    "robot arm", "robotic gripper", "robot",
+]
+
+# --- Hazard categories (match the class/label strings above) ----------------
+SHARP_CLASSES = {"knife", "kitchen knife", "cleaver", "scissors", "fork"}
+HUMAN_CLASSES = {"person", "child"}
+HAND_CLASSES = {"hand"}  # open-vocab hand box -> precise-ish target without MediaPipe
+FRAGILE_CLASSES = {"cup", "mug", "glass", "wine glass", "bowl", "plate", "bottle"}
+HOT_ZONE_CLASSES = {"pot", "pan", "frying pan", "stove", "gas stove", "oven",
+                    "microwave", "kettle", "flame", "fire", "boiling water"}
 # Treat any of these as "the thing the robot is manipulating" if held near a person.
 HANDHELD_CLASSES = SHARP_CLASSES | FRAGILE_CLASSES
 
@@ -52,12 +67,22 @@ class WatchdogConfig:
     frame_width: int = 1280
     frame_height: int = 720
 
-    # --- perception (layer 1) ---
-    # SEGMENTATION model (-seg) so we get masks, not just boxes. Masks let us
-    # recover the blade's orientation and tip via PCA. Bump to yolov8s-seg for
-    # accuracy at some fps cost.
-    yolo_model: str = "yolov8n-seg.pt"
-    use_hand_landmarks: bool = True  # MediaPipe Hands for precise fingertip positions
+    # --- perception (layer 1) ------------------------------------------------
+    # backend:
+    #   "yoloe" -> open-vocabulary segmentation (recommended): segments &
+    #             classifies arbitrary objects from OPEN_VOCAB_PROMPTS, incl.
+    #             dangerous ones and "hand". Needs CLIP + MobileCLIP (one-time
+    #             ~572MB download; text embeddings are cached afterward).
+    #   "yolo"  -> classic COCO segmentation (80 fixed classes). Lighter, no
+    #             extra downloads. Use a LARGE model for usable knife masks.
+    detector_backend: str = "yoloe"
+    yoloe_model: str = "yoloe-11s-seg.pt"   # -> 11m/11l-seg for more accuracy
+    open_vocab_prompts: list[str] = field(default_factory=lambda: list(OPEN_VOCAB_PROMPTS))
+    # Used only when detector_backend == "yolo". Nano misses thin objects like
+    # knives — default to a large seg model for real detection quality.
+    yolo_model: str = "yolo11l-seg.pt"
+    textpe_cache: str = ".textpe_cache.pt"  # cached open-vocab text embeddings
+    use_hand_landmarks: bool = True  # MediaPipe Hands (arm64/Linux/Win only)
 
     # --- reasoning (layer 2) — the GENERALIST detector -----------------------
     # The VLM is open-vocabulary: it judges ANY dangerous situation, not just the

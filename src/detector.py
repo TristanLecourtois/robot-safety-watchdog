@@ -1,14 +1,24 @@
-"""Layer 1 — fast per-frame perception.
+"""Layer 1 — per-frame perception.
 
-Wraps YOLO (object detection) so the rest of the system sees a clean list of
-`Detection` objects with stable track IDs (so we can measure speed across
-frames). This runs every frame at ~15-30 fps on CPU with the nano model.
+Wraps a segmentation model so the rest of the system sees a clean list of
+`Detection` objects (label, box, mask, track id). Two backends:
+
+  - "yoloe": open-vocabulary segmentation. We hand it text prompts
+    (config.OPEN_VOCAB_PROMPTS) and it segments + classifies *those* concepts,
+    so we can target dangerous objects directly and detect "hand" without
+    MediaPipe. Text-prompt embeddings are computed once (needs MobileCLIP) and
+    cached to disk so later runs start fast.
+  - "yolo": classic COCO segmentation (80 fixed classes), lighter.
+
+Both produce masks, which is what enables blade orientation/tip recovery.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 
@@ -38,16 +48,69 @@ def box_distance(a: Detection, b: Detection) -> float:
 
 
 class Detector:
-    def __init__(self, model_path: str, min_confidence: float):
-        self.model = YOLO(model_path)
+    """Backend-agnostic detector. Construct via `Detector.build(config)`."""
+
+    def __init__(self, model, min_confidence: float):
+        self.model = model
         self.min_confidence = min_confidence
-        self.names = self.model.names  # id -> class name
+        self.names = model.names
+        self._use_track = True  # flipped off if the backend can't track
+
+    # ----- construction ------------------------------------------------------
+    @classmethod
+    def build(cls, config) -> "Detector":
+        backend = getattr(config, "detector_backend", "yolo")
+        if backend == "yoloe":
+            try:
+                return cls._build_yoloe(config)
+            except Exception as e:  # fall back to classic seg if open-vocab fails
+                print(f"[detector] YOLOE unavailable ({e}); falling back to {config.yolo_model}")
+        return cls(YOLO(config.yolo_model), config.thresholds.min_confidence)
+
+    @classmethod
+    def _build_yoloe(cls, config) -> "Detector":
+        from ultralytics import YOLOE  # imported lazily; pulls CLIP on first use
+
+        model = YOLOE(config.yoloe_model)
+        prompts = list(config.open_vocab_prompts)
+        pe = cls._text_embeddings(model, prompts, config.textpe_cache)
+        model.set_classes(prompts, pe)
+        det = cls(model, config.thresholds.min_confidence)
+        print(f"[detector] YOLOE open-vocab with {len(prompts)} prompts")
+        return det
+
+    @staticmethod
+    def _text_embeddings(model, prompts: list[str], cache_path: str):
+        """Compute text-prompt embeddings once, then cache. Loading the cache
+        avoids reloading MobileCLIP (the 572MB encoder) on every startup."""
+        key = "|".join(prompts)
+        if os.path.exists(cache_path):
+            blob = torch.load(cache_path, map_location="cpu")
+            if blob.get("key") == key:
+                return blob["pe"]
+        pe = model.get_text_pe(prompts)
+        try:
+            torch.save({"key": key, "pe": pe}, cache_path)
+        except Exception:
+            pass
+        return pe
+
+    # ----- inference ---------------------------------------------------------
+    def _infer(self, frame: np.ndarray):
+        # Prefer tracking (stable IDs -> speed-based rules). Some open-vocab
+        # configs don't support .track; fall back to .predict once and remember.
+        if self._use_track:
+            try:
+                return self.model.track(
+                    frame, persist=True, verbose=False, conf=self.min_confidence
+                )
+            except Exception:
+                self._use_track = False
+                print("[detector] tracking unavailable; using predict (no track IDs)")
+        return self.model.predict(frame, verbose=False, conf=self.min_confidence)
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
-        # persist=True keeps track IDs stable across calls (ByteTrack under the hood).
-        results = self.model.track(
-            frame, persist=True, verbose=False, conf=self.min_confidence
-        )
+        results = self._infer(frame)
         out: list[Detection] = []
         if not results:
             return out
@@ -55,6 +118,7 @@ class Detector:
         boxes = res.boxes
         if boxes is None:
             return out
+        names = res.names if res.names else self.names  # reflects open-vocab set_classes
         ids = boxes.id
         masks = res.masks  # may be None for non-seg models
         for i in range(len(boxes)):
@@ -69,7 +133,7 @@ class Detector:
             out.append(
                 Detection(
                     track_id=track_id,
-                    label=self.names[cls_id],
+                    label=names[cls_id],
                     confidence=float(boxes.conf[i].item()),
                     box=(x1, y1, x2, y2),
                     mask=mask_xy,

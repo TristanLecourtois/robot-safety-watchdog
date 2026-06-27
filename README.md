@@ -25,9 +25,10 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
 ## Architecture
 
 ```
- camera ─▶ Layer 1: Perception (every frame, ~15-30 fps)
-           ├─ YOLOv8-seg  → object masks + track IDs
-           └─ MediaPipe   → 21 hand landmarks (fingertips)
+ camera ─▶ Layer 1: Perception (every frame)
+           ├─ YOLOE (open-vocab seg) → masks + classes for ANY prompted object
+           │    (knife, cleaver, stove, flame, "hand", … — edit the prompt list)
+           └─ MediaPipe → 21 hand landmarks (where wheels exist; else "hand" prompt)
                  │
                  ▼
            orientation.py → blade axis / tip / angle (PCA on mask)
@@ -91,11 +92,20 @@ python main.py
 ## Tuning precision
 
 Everything lives in [config.py](config.py):
-- `blade_tip_to_hand_px` — how close the tip must be to a fingertip to fire.
+- `detector_backend` — `"yoloe"` (open-vocabulary segmentation, default) or
+  `"yolo"` (classic COCO seg). YOLOE segments/classifies whatever you list in
+  `OPEN_VOCAB_PROMPTS`, so adding a new hazard is just adding a word.
+- `OPEN_VOCAB_PROMPTS` — the things to detect (sharp/fragile/hot/person/hand/…).
+  Add "cleaver", "boiling water", "robot gripper", etc. and the hazard category
+  sets below it pick them up.
+- `blade_tip_to_hand_px` — how close the tip must be to a hand to fire.
 - `blade_aim_angle_deg` — how directly the blade must point at the hand (smaller =
   must be aimed straight at it) to escalate to *critical*.
-- `yolo_model` — `yolov8n-seg.pt` (fast) → `yolov8s-seg.pt` / `yolov8m-seg.pt` for
-  more accurate masks.
+- `yoloe_model` / `yolo_model` — `yoloe-11s-seg` → `11m`/`11l` (or
+  `yolo11l-seg.pt` → `yolo11x-seg.pt`) for more accuracy at some fps cost.
+
+> First YOLOE run pulls Ultralytics' CLIP and MobileCLIP (~572 MB, one time) to
+> embed the text prompts; embeddings are then cached to `.textpe_cache.pt`.
 - `vlm_model` — `claude-opus-4-8` (best), `claude-sonnet-4-6` (faster),
   `claude-haiku-4-5` (cheapest) for higher fps on the reasoning layer.
 
