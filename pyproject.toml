@@ -1,0 +1,22 @@
+[project]
+name = "robot-safety-watchdog"
+version = "0.1.0"
+description = "Generalist external vision watchdog for learning-based home robots"
+readme = "README.md"
+# MediaPipe has no wheels for 3.13 yet; pin to a supported interpreter.
+# uv will fetch a matching Python automatically.
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "opencv-python>=4.9",
+    "ultralytics>=8.3",
+    "anthropic>=0.69",
+    "numpy>=1.26",
+    "python-dotenv>=1.0",
+    "mediapipe>=0.10",
+]
+
+[project.scripts]
+watchdog = "main:main"
+
+[tool.uv]
+# Nothing special needed; listed for discoverability.

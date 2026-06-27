@@ -59,25 +59,34 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
 | [src/overlay.py](src/overlay.py) | Debug/demo visualization |
 | [src/watchdog.py](src/watchdog.py) | Main loop wiring the layers together |
 
-## Setup
+## Setup & Run (uv — recommended)
+
+[uv](https://docs.astral.sh/uv/) handles the virtualenv, the dependencies, and
+even fetches a compatible Python (MediaPipe has no 3.13 wheels yet, so the
+project pins `>=3.10,<3.13` and uv grabs the right interpreter automatically).
+
+```bash
+cp .env.example .env        # then add your ANTHROPIC_API_KEY
+uv run main.py              # live webcam — installs deps on first run
+uv run main.py --video clip.mp4   # analyze a recorded clip
+```
+
+`uv run` creates `.venv` and installs everything the first time, then is instant.
+No manual `activate` needed. Press `q` to quit. Alerts stream to the console and
+to `watchdog_events.jsonl`.
+
+<details>
+<summary>Alternative: plain pip</summary>
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then add your ANTHROPIC_API_KEY
+python main.py
 ```
+</details>
 
 > MediaPipe is optional — if it isn't installed the system falls back to
 > person-box proximity instead of fingertip precision.
-
-## Run
-
-```bash
-python main.py             # live webcam
-python main.py --video clip.mp4   # analyze a recorded clip
-```
-
-Press `q` to quit. Alerts stream to the console and to `watchdog_events.jsonl`.
 
 ## Tuning precision
 
