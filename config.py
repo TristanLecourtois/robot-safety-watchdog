@@ -99,6 +99,17 @@ class WatchdogConfig:
     # on the API (the overlay keeps the last verdict until a new one arrives).
     vlm_async: bool = True
 
+    # --- world-model track (V-JEPA 2 latent OOD) — optional, heavy ----------
+    # Off by default; enable with `--worldmodel` (needs the `worldmodel` extra).
+    # On an Intel-Mac CPU a clip encode is ~10-20s, so this is a periodic
+    # background "deep glance", not a per-frame detector.
+    enable_world_model: bool = False
+    wm_model: str = "facebook/vjepa2-vitl-fpc64-256"
+    wm_clip_frames: int = 8        # fewer frames = faster encode on CPU
+    wm_input_size: int = 256
+    wm_calib_clips: int = 12       # clips of normal/safe operation to baseline
+    wm_z_threshold: float = 3.0    # z-score over baseline spread -> anomaly
+
     # --- alerting ---
     alert_cooldown_s: float = 3.0  # don't spam the same alert
     log_path: str = "watchdog_events.jsonl"

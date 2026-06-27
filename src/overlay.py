@@ -19,7 +19,8 @@ WHITE = (255, 255, 255)
 
 
 def draw(frame, detections: list[Detection], hands: list[Hand],
-         analysis: FrameAnalysis, verdict_text: str | None, severity: str | None):
+         analysis: FrameAnalysis, verdict_text: str | None, severity: str | None,
+         latent=None):
     for d in detections:
         x1, y1, x2, y2 = (int(v) for v in d.box)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (180, 180, 180), 1)
@@ -49,4 +50,67 @@ def draw(frame, detections: list[Detection], hands: list[Hand],
     if verdict_text:
         cv2.putText(frame, verdict_text[:90], (10, frame.shape[0] - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 1)
+
+    if latent is not None:
+        _draw_latent_panel(frame, latent)
     return frame
+
+
+def _draw_latent_panel(frame, latent):
+    """Top-right panel: V-JEPA latent OOD status, danger z-score, and a 2D PCA
+    map (green = learned 'normal' cloud, moving dot = current situation)."""
+    h, w = frame.shape[:2]
+    pw, ph = 220, 200
+    x0, y0 = w - pw - 10, 44
+    panel = frame[y0:y0 + ph, x0:x0 + pw]
+    panel[:] = (panel * 0.35).astype(panel.dtype)  # darken backdrop
+    cv2.rectangle(frame, (x0, y0), (x0 + pw, y0 + ph), (90, 90, 90), 1)
+
+    status = latent.status
+    cv2.putText(frame, f"V-JEPA: {status}", (x0 + 8, y0 + 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, WHITE, 1)
+    if status == "calibrating":
+        cv2.putText(frame, f"normal {latent.progress}", (x0 + 8, y0 + 38),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, AMBER, 1)
+    elif status == "loading":
+        cv2.putText(frame, "model ~80s...", (x0 + 8, y0 + 38),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, AMBER, 1)
+    elif status == "monitoring":
+        z = latent.danger_score
+        col = RED if latent.is_anomaly else GREEN
+        cv2.putText(frame, f"danger z={z:.1f}", (x0 + 8, y0 + 38),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, col, 1)
+        # score bar
+        frac = max(0.0, min(1.0, z / 6.0))
+        cv2.rectangle(frame, (x0 + 8, y0 + 46), (x0 + 8 + int(frac * (pw - 16)), y0 + 54), col, -1)
+
+    # 2D PCA map
+    map_top = y0 + 62
+    _scatter(frame, latent, x0 + 8, map_top, pw - 16, ph - (map_top - y0) - 8)
+
+
+def _scatter(frame, latent, mx, my, mw, mh):
+    import numpy as np
+
+    pts = []
+    if latent.normal_2d is not None and len(latent.normal_2d):
+        pts.append(np.asarray(latent.normal_2d))
+    if latent.recent_2d:
+        pts.append(np.asarray(latent.recent_2d))
+    if not pts:
+        return
+    allp = np.concatenate(pts, axis=0)
+    lo, hi = allp.min(axis=0), allp.max(axis=0)
+    rng = np.maximum(hi - lo, 1e-6)
+
+    def to_px(p):
+        u = (p - lo) / rng
+        return int(mx + u[0] * mw), int(my + (1 - u[1]) * mh)
+
+    if latent.normal_2d is not None:
+        for p in latent.normal_2d:
+            cv2.circle(frame, to_px(p), 2, GREEN, -1)
+    for i, p in enumerate(latent.recent_2d):
+        last = i == len(latent.recent_2d) - 1
+        col = (RED if latent.is_anomaly else AMBER) if last else (150, 150, 150)
+        cv2.circle(frame, to_px(np.asarray(p)), 4 if last else 2, col, -1)

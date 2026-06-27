@@ -47,7 +47,34 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
                  │
                  ▼
         JSONL event log  +  live overlay  (+ kill-switch hook)
+
+ Parallel WORLD-MODEL track (optional, --worldmodel):
+   V-JEPA 2 encodes short clips → latent space → OOD danger score
+   • learns what "normal/safe" operation looks like (no danger labels)
+   • flags moments that drift out of that distribution as surprising/unsafe
+   • live 2D PCA map: green = normal cloud, moving dot = current situation
 ```
+
+### World-model track (V-JEPA 2 latent OOD)
+
+A self-supervised counterpart to the symbolic track: instead of naming hazards,
+a video world model (V-JEPA 2) learns the *latent distribution of safe
+operation* and flags out-of-distribution moments — "the model knows what normal
+looks like; danger is surprise." Ties directly to the OOD/failure-mode thesis.
+
+```bash
+uv run --extra worldmodel main.py --worldmodel   # webcam + latent OOD panel
+```
+
+Workflow: show ~12 clips of normal/safe operation (auto-calibration), then it
+monitors drift and lights up the latent map + danger z-score on anomalies.
+
+> **CPU reality:** V-JEPA 2 ViT-L is heavy — ~80s one-time load and ~10-20s per
+> clip on an Intel-Mac CPU. So this runs fully **async** as a periodic "deep
+> glance" (a latent verdict every ~10-20s), never blocking the fast tracks. For
+> a smooth demo, a GPU or precomputed clip latents are far better. One-time
+> ~1.2GB model download. (transformers is pinned `<5`: 5.x needs torch≥2.4,
+> which has no macOS-Intel wheels.)
 
 | File | Role |
 |------|------|

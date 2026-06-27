@@ -27,6 +27,17 @@ dependencies = [
 # the watchdog falls back to person-box proximity (everything else still runs,
 # including blade orientation/tip from the YOLO mask).
 hands = ["mediapipe>=0.10"]
+# World-model track: V-JEPA 2 latent OOD danger scoring. Heavy (ViT-L) —
+# `uv run --extra worldmodel main.py`. One-time ~1.2GB model download.
+worldmodel = [
+    # transformers 5.x requires torch>=2.4, which has no macOS-Intel wheels.
+    # 4.53+ has V-JEPA 2 and still runs on the pinned torch 2.2.2.
+    "transformers>=4.53,<5",
+    "safetensors>=0.4",
+    "huggingface-hub>=0.24",
+    "einops>=0.7",
+    "scikit-learn>=1.3",  # PCA for the latent map + simple OOD model
+]
 
 [project.scripts]
 watchdog = "main:main"

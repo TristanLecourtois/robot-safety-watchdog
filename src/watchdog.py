@@ -34,6 +34,16 @@ class Watchdog:
         self._vlm_busy = False           # a background judgment is in flight
         self._lock = threading.Lock()
 
+        # Optional world-model track (lazy, heavy). Built only when enabled.
+        self.world = None
+        if config.enable_world_model:
+            from src.world_model import LatentOODMonitor, VJEPAEncoder
+            enc = VJEPAEncoder(config.wm_model, config.wm_input_size)
+            self.world = LatentOODMonitor(
+                enc, config.wm_clip_frames, config.wm_calib_clips,
+                config.wm_z_threshold, config.wm_input_size,
+            )
+
     def process_frame(self, frame, now: float):
         detections = self.detector.detect(frame)
         hands = self.hands.detect(frame) if self.hands else []
@@ -48,8 +58,16 @@ class Watchdog:
             self._last_vlm_t = now
             self._dispatch_vlm(frame.copy(), facts)
 
+        # World-model track: feed frames, kick a background encode when ready.
+        if self.world is not None:
+            self.world.push_frame(frame)
+            self.world.maybe_encode()
+
         self._maybe_alert(analysis, self._last_verdict, facts, now)
         return detections, hands, analysis
+
+    def world_state(self):
+        return self.world.snapshot() if self.world is not None else None
 
     def _dispatch_vlm(self, frame, facts: str):
         """Run the (slow) VLM call without blocking the fast loop."""
@@ -121,7 +139,8 @@ def run_webcam(config: cfg.WatchdogConfig = cfg.CONFIG):
             detections, hands, analysis = wd.process_frame(frame, now)
             rationale, vlm_sev = wd.verdict_banner()
             sev = analysis.max_severity or vlm_sev
-            overlay.draw(frame, detections, hands, analysis, rationale, sev)
+            overlay.draw(frame, detections, hands, analysis, rationale, sev,
+                         latent=wd.world_state())
             cv2.imshow("Robot Safety Watchdog", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
