@@ -414,17 +414,41 @@
       const off = document.createElement("canvas"); off.width = LW; off.height = LH;
       return { el, video, ctx: canvas.getContext("2d"), octx: off.getContext("2d", { willReadFrequently: true }), off };
     });
+    const W = 288, H = 160;
+    const qbez = (s, c, e, u) => { const m = 1 - u; return [m * m * s[0] + 2 * m * u * c[0] + u * u * e[0], m * m * s[1] + 2 * m * u * c[1] + u * u * e[1]]; };
+    // predicted end-effector trajectory for rollout i; bends INTO the hazard if dangerous
+    function drawTraj(ctx, el, i, ts) {
+      const lvl = el.classList.contains("danger") ? "danger" : el.classList.contains("warning") ? "warning" : "safe";
+      const col = lvl === "danger" ? "#ff4d54" : lvl === "warning" ? "#f5a623" : "#5bb734";
+      const start = [W * 0.16, H * 0.52], hazard = [W * 0.70, H * 0.50];
+      let end, ctrl;
+      if (lvl === "safe") { end = [W * 0.86, H * (0.28 + 0.22 * i)]; ctrl = [(start[0] + end[0]) / 2, start[1] - 28 - 14 * i]; }
+      else if (lvl === "warning") { end = [hazard[0] - 24, hazard[1] - 12]; ctrl = [(start[0] + end[0]) / 2, start[1] + 8]; }
+      else { end = [hazard[0], hazard[1]]; ctrl = [(start[0] + end[0]) / 2 - 8 + 6 * i, start[1] - 6]; }
+      // hazard marker (the object of concern)
+      ctx.strokeStyle = "rgba(255,77,84,.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(hazard[0] - 5, hazard[1] - 5); ctx.lineTo(hazard[0] + 5, hazard[1] + 5);
+      ctx.moveTo(hazard[0] + 5, hazard[1] - 5); ctx.lineTo(hazard[0] - 5, hazard[1] + 5); ctx.stroke();
+      // dashed predicted path
+      ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(start[0], start[1]); ctx.quadraticCurveTo(ctrl[0], ctrl[1], end[0], end[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(start[0], start[1], 4, 0, 7); ctx.fill();      // gripper origin
+      ctx.beginPath(); ctx.arc(end[0], end[1], 3, 0, 7); ctx.fill();                                 // predicted end
+      const u = ((ts / 1400) + i * 0.33) % 1, p = qbez(start, ctrl, end, u);                          // moving gripper
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 7); ctx.fill(); ctx.stroke();
+    }
     let last = 0;
     function render(ts) {
       if (ts - last > 70) {                        // ~14 fps is plenty (and saves CPU)
         last = ts;
-        for (const t of tiles) {
-          if (t.video.readyState < 2 || !t.video.videoWidth) continue;
+        tiles.forEach((t, idx) => {
+          if (t.video.readyState < 2 || !t.video.videoWidth) return;
           t.octx.drawImage(t.video, 0, 0, LW, LH); // encode: downsample to latent
           const img = t.octx.getImageData(0, 0, LW, LH), d = img.data;
           const danger = t.el.classList.contains("danger");
-          const warn = t.el.classList.contains("warning");
-          const N = danger ? 80 : warn ? 50 : 26;  // noise grows with uncertainty
+          const N = danger ? 80 : t.el.classList.contains("warning") ? 50 : 26;  // noise grows with uncertainty
           const STEP = 40;                          // posterize -> discrete latent codes
           for (let i = 0; i < d.length; i += 4) {
             for (let c = 0; c < 3; c++) {
@@ -436,8 +460,9 @@
           }
           t.octx.putImageData(img, 0, 0);
           t.ctx.imageSmoothingEnabled = true;        // decode: smooth upsample
-          t.ctx.drawImage(t.off, 0, 0, 288, 160);
-        }
+          t.ctx.drawImage(t.off, 0, 0, W, H);
+          drawTraj(t.ctx, t.el, idx, ts);            // overlay predicted trajectory
+        });
       }
       requestAnimationFrame(render);
     }
