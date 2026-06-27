@@ -5,6 +5,43 @@ This is the minimal integration guide for plugging the harness into an OpenARM s
 LeRobot `main` inspection reference used for this guide:
 `3dd19d043e2f3fe5673b13ea0ebe4f31884c0797`.
 
+## 0. Fresh-Clone Smoke Test
+
+After cloning the repository on another machine, run the harness-only smoke test:
+
+```bash
+git clone <your-repo-url>
+cd robot-safety-watchdog
+python3 -m harness.openarm_smoke
+```
+
+This test does not require a camera, YOLO model, or real OpenARM hardware. It
+uses scripted scene contexts to verify that:
+
+- an unsafe planned sharp-tool action returns `BLOCK` and is not executed;
+- a safe planned action returns `ALLOW` and reaches the controller adapter;
+- runtime danger returns `PAUSE`;
+- two safe runtime frames trigger `RESUME`;
+- JSONL audit events are written.
+
+You do not need a robot-side policy model for this test. The smoke test uses the
+deterministic harness policies from `harness/policy.py` and fake perception
+outputs. OpenARM only needs to expose a Python control object that the harness
+can call.
+
+To test with the real OpenARM controller, edit
+`harness/openarm_smoke.py`, replace `build_openarm_controller()` with your
+LeRobot/OpenARM setup, then run:
+
+```bash
+python3 -m harness.openarm_smoke --real-openarm --log harness_events.jsonl
+```
+
+The controller object should expose at least one execution method, for example
+`execute`, `send_action`, `play_trajectory`, or `replay_trajectory`. For runtime
+interaction tests, also expose `pause`, `resume`, and `stop` or
+`emergency_stop`.
+
 ## 1. What Works Now
 
 The current harness is easy to plug in for command gating:
