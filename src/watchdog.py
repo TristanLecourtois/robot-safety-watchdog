@@ -7,6 +7,7 @@ Alerts are logged to JSONL (the "insurance data") and surfaced on the overlay.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import asdict
 
@@ -30,28 +31,42 @@ class Watchdog:
         self._last_vlm_t = 0.0
         self._last_alert_t = 0.0
         self._last_verdict: Verdict | None = None
+        self._vlm_busy = False           # a background judgment is in flight
+        self._lock = threading.Lock()
 
     def process_frame(self, frame, now: float):
         detections = self.detector.detect(frame)
         hands = self.hands.detect(frame) if self.hands else []
         analysis = self.rules.analyze(detections, hands)
 
-        sev = analysis.max_severity
         facts = self._facts_string(analysis)
-
-        # Escalate to the VLM when a rule fires (rate-limited) or on the idle timer.
-        want_vlm = (
-            (sev and now - self._last_vlm_t >= self.cfg.vlm_min_interval_s)
-            or (now - self._last_vlm_t >= self.cfg.vlm_idle_interval_s)
-        )
-        if want_vlm and self.vlm.available:
+        # GENERALIST cadence: run the VLM continuously. A rule hit just lets us
+        # fire sooner (down to the min floor) so reaction is faster on known
+        # hazards; with no hit we still judge the whole scene every interval.
+        interval = self.cfg.vlm_min_interval_s if analysis.hits else self.cfg.vlm_interval_s
+        if self.vlm.available and not self._vlm_busy and now - self._last_vlm_t >= interval:
             self._last_vlm_t = now
-            verdict = self.vlm.judge(frame, facts)
-            if verdict is not None:
-                self._last_verdict = verdict
+            self._dispatch_vlm(frame.copy(), facts)
 
         self._maybe_alert(analysis, self._last_verdict, facts, now)
         return detections, hands, analysis
+
+    def _dispatch_vlm(self, frame, facts: str):
+        """Run the (slow) VLM call without blocking the fast loop."""
+        def work():
+            verdict = self.vlm.judge(frame, facts)
+            with self._lock:
+                if verdict is not None:
+                    self._last_verdict = verdict
+                self._vlm_busy = False
+            if verdict is not None and verdict.severity in ("warning", "critical"):
+                self._log_event(None, verdict, facts, time.time())
+
+        self._vlm_busy = True
+        if self.cfg.vlm_async:
+            threading.Thread(target=work, daemon=True).start()
+        else:
+            work()
 
     def _facts_string(self, analysis: FrameAnalysis) -> str:
         if not analysis.hits:
@@ -59,21 +74,25 @@ class Watchdog:
         return "\n".join(f"- [{h.severity}] {h.reason}" for h in analysis.hits)
 
     def _maybe_alert(self, analysis: FrameAnalysis, verdict, facts, now):
-        rule_sev = analysis.max_severity
-        vlm_critical = verdict is not None and verdict.severity in ("warning", "critical")
-        if not (rule_sev or vlm_critical):
+        # Only the instant rule layer alerts from the fast loop; the VLM logs its
+        # own verdicts from the background worker (see _dispatch_vlm).
+        if not analysis.max_severity:
             return
         if now - self._last_alert_t < self.cfg.alert_cooldown_s:
             return
         self._last_alert_t = now
+        self._log_event(analysis, verdict, facts, now)
+
+    def _log_event(self, analysis: FrameAnalysis | None, verdict, facts, now):
         event = {
             "ts": now,
-            "rule_severity": rule_sev,
-            "rule_hits": [asdict(h) for h in analysis.hits],
+            "rule_severity": analysis.max_severity if analysis else None,
+            "rule_hits": [asdict(h) for h in analysis.hits] if analysis else [],
             "vlm_verdict": asdict(verdict) if verdict else None,
         }
         with open(self.cfg.log_path, "a") as f:
             f.write(json.dumps(event) + "\n")
+        rule_sev = analysis.max_severity if analysis else None
         action = verdict.recommended_action if verdict else "monitor"
         print(f"[ALERT] rule={rule_sev} vlm={verdict.severity if verdict else '-'} action={action}")
 

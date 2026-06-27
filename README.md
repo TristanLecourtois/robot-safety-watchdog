@@ -13,9 +13,14 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
   knife points. We segment the blade, recover its **orientation and tip** via PCA,
   and track **fingertips** with MediaPipe — so we can ask the question safety
   actually cares about: *is the blade tip close to and pointed at a hand?*
-- **Two-layer architecture** — fast deterministic rules protect in real time; a
-  VLM (Claude vision) adds behavioral judgment and produces the audit/insurance
-  rationale.
+- **Generalist by design.** The VLM (Claude vision) is the open-vocabulary
+  detector — it judges *any* dangerous situation (collision, hot liquid, fall,
+  crush, child in workspace…), not a fixed list. It runs **continuously in the
+  background (~1.5 s cadence)**. The deterministic rules are a **fast reflex
+  layer** (<100 ms) for high-frequency hazards where sub-second reaction matters.
+- **Not frame-rate real-time for the VLM — by design.** A vision API call takes
+  1-4 s, so it can't run at 30 fps. The fast layer gives instant reflexes; the VLM
+  runs async so it never stalls the loop, and the overlay shows its latest verdict.
 
 ## Architecture
 
@@ -35,8 +40,9 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
    • object near hot zone (oven/stove)
                  │  on hit (or idle timer)
                  ▼
- Layer 2: VLM judge (Claude vision, structured verdict)
-   • dangerous? severity? category? rationale? recommended_action?
+ Layer 2: VLM judge (Claude vision) — GENERALIST, runs continuously, async
+   • open-vocabulary: any hazard, not a fixed list
+   • returns: dangerous? severity? category? rationale? recommended_action?
                  │
                  ▼
         JSONL event log  +  live overlay  (+ kill-switch hook)

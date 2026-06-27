@@ -59,12 +59,20 @@ class WatchdogConfig:
     yolo_model: str = "yolov8n-seg.pt"
     use_hand_landmarks: bool = True  # MediaPipe Hands for precise fingertip positions
 
-    # --- reasoning (layer 2) ---
+    # --- reasoning (layer 2) — the GENERALIST detector -----------------------
+    # The VLM is open-vocabulary: it judges ANY dangerous situation, not just the
+    # ones the rules hard-code. So we run it continuously as the primary detector.
+    # For a continuous cadence, claude-sonnet-4-6 / claude-haiku-4-5 are faster &
+    # cheaper than opus and usually the right call (set WATCHDOG_VLM_MODEL).
     vlm_model: str = field(default_factory=lambda: os.getenv("WATCHDOG_VLM_MODEL", "claude-opus-4-8"))
-    # Only call the VLM at most this often (seconds) — it's the expensive path.
-    vlm_min_interval_s: float = 2.0
-    # Always escalate to the VLM when a hard rule fires; otherwise sample idly.
-    vlm_idle_interval_s: float = 8.0
+    # Steady cadence: judge the scene roughly this often even with no rule hit.
+    # This is what makes it generalist. ~1.5s ≈ as real-time as a VLM gets.
+    vlm_interval_s: float = 1.5
+    # Floor between calls when a rule escalates (call ASAP, but don't spam the API).
+    vlm_min_interval_s: float = 0.8
+    # Run the VLM in a background thread so the fast layer never stalls waiting
+    # on the API (the overlay keeps the last verdict until a new one arrives).
+    vlm_async: bool = True
 
     # --- alerting ---
     alert_cooldown_s: float = 3.0  # don't spam the same alert
