@@ -20,7 +20,7 @@ WHITE = (255, 255, 255)
 
 def draw(frame, detections: list[Detection], hands: list[Hand],
          analysis: FrameAnalysis, verdict_text: str | None, severity: str | None,
-         latent=None):
+         latent=None, future=None):
     for d in detections:
         x1, y1, x2, y2 = (int(v) for v in d.box)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (180, 180, 180), 1)
@@ -53,7 +53,29 @@ def draw(frame, detections: list[Detection], hands: list[Hand],
 
     if latent is not None:
         _draw_latent_panel(frame, latent)
+    if future is not None:
+        _draw_future_strip(frame, future)
     return frame
+
+
+def _draw_future_strip(frame, future):
+    """Bottom strip: the imagined future frames + a VETO banner if the predicted
+    future looks dangerous."""
+    h, w = frame.shape[:2]
+    label = {"loading": "imagining... (loading model)", "idle": "imagining future..."}.get(
+        future.status, f"IMAGINED FUTURE  danger={future.danger:+.2f}")
+    col = RED if getattr(future, "is_danger", False) else (60, 60, 60)
+    cv2.rectangle(frame, (0, h - 116), (w, h - 96), col, -1)
+    tag = "VETO: predicted future is dangerous" if future.is_danger else label
+    cv2.putText(frame, tag, (10, h - 101), cv2.FONT_HERSHEY_SIMPLEX, 0.55, WHITE, 2)
+    x = 8
+    for thumb in future.future_frames:
+        th, tw = thumb.shape[:2]
+        y = h - 96
+        if y + th > h or x + tw > w:
+            break
+        frame[y:y + th, x:x + tw] = thumb
+        x += tw + 6
 
 
 def _draw_latent_panel(frame, latent):

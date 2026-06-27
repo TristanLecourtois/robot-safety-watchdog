@@ -73,8 +73,34 @@ monitors drift and lights up the latent map + danger z-score on anomalies.
 > clip on an Intel-Mac CPU. So this runs fully **async** as a periodic "deep
 > glance" (a latent verdict every ~10-20s), never blocking the fast tracks. For
 > a smooth demo, a GPU or precomputed clip latents are far better. One-time
-> ~1.2GB model download. (transformers is pinned `<5`: 5.x needs torch≥2.4,
-> which has no macOS-Intel wheels.)
+> ~1.2GB model download. (transformers is pinned `<5` on Intel Mac: 5.x needs
+> torch≥2.4, which has no macOS-Intel wheels.)
+
+### Generative future-preview track (GPU — the "wow")
+
+The generative half of the hybrid: from the current frame, **Stable Video
+Diffusion imagines a short future clip**, we score each predicted frame for
+danger via few-shot CLIP anchors, and raise a **preventive VETO** before
+anything happens — "imagine the near future, veto danger." Camera-only,
+automatic continuation (no robot action signal needed).
+
+**GPU/CUDA only.** Set up the anchors (see [anchors/](anchors/)), then:
+
+```bash
+# Live: imagined-future strip + VETO under the main view
+uv run --extra generative main.py --future
+
+# Offline artifact (most reliable demo): a "present -> imagined future" MP4
+uv run --extra generative python scripts/imagine_future.py \
+    --image scene.jpg --anchors anchors/ --out imagined_future.mp4
+```
+
+> Stable Video Diffusion needs CUDA + fp16 and is heavy (seconds per clip even
+> on GPU), so it runs **async** as a periodic glance. On the GPU box, install a
+> **CUDA torch build** (the pins in `pyproject.toml` cap torch only on macOS
+> Intel; elsewhere they float). The full pipeline (symbolic + VLM + V-JEPA
+> latent + generative future) is the complete demo — run with
+> `uv run --extra worldmodel --extra generative main.py --worldmodel --future`.
 
 | File | Role |
 |------|------|
