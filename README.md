@@ -1,0 +1,95 @@
+# Robot Safety Vision Watchdog
+
+An **independent, external** vision watchdog for learning-based home robots. It
+watches a robot operate (starting with the kitchen — 47% of household injuries)
+and flags dangerous situations in real time, without trusting what the robot
+*intends* to do. This is the "crash-test / SOC 2 for robotic safety" thesis made
+concrete: we don't verify the model's weights, we **measure observed behavior**.
+
+## Why this design
+
+- **Empirical, not simulated.** Judgments come from the real camera feed.
+- **Precise geometry, not just boxes.** A bounding box can't tell you which way a
+  knife points. We segment the blade, recover its **orientation and tip** via PCA,
+  and track **fingertips** with MediaPipe — so we can ask the question safety
+  actually cares about: *is the blade tip close to and pointed at a hand?*
+- **Two-layer architecture** — fast deterministic rules protect in real time; a
+  VLM (Claude vision) adds behavioral judgment and produces the audit/insurance
+  rationale.
+
+## Architecture
+
+```
+ camera ─▶ Layer 1: Perception (every frame, ~15-30 fps)
+           ├─ YOLOv8-seg  → object masks + track IDs
+           └─ MediaPipe   → 21 hand landmarks (fingertips)
+                 │
+                 ▼
+           orientation.py → blade axis / tip / angle (PCA on mask)
+                 │
+                 ▼
+ Layer 1.5: Rule engine (deterministic, real-time)
+   • blade tip → nearest fingertip distance
+   • blade aim angle (is it pointing AT the hand?)
+   • fragile object fast-motion (drop risk)
+   • object near hot zone (oven/stove)
+                 │  on hit (or idle timer)
+                 ▼
+ Layer 2: VLM judge (Claude vision, structured verdict)
+   • dangerous? severity? category? rationale? recommended_action?
+                 │
+                 ▼
+        JSONL event log  +  live overlay  (+ kill-switch hook)
+```
+
+| File | Role |
+|------|------|
+| [config.py](config.py) | All thresholds and model choices |
+| [src/detector.py](src/detector.py) | YOLO segmentation + tracking → `Detection` |
+| [src/orientation.py](src/orientation.py) | **Blade orientation & tip via PCA on the mask** |
+| [src/pose.py](src/pose.py) | MediaPipe hand landmarks / fingertips |
+| [src/rules.py](src/rules.py) | Deterministic safety rules over the fine geometry |
+| [src/vlm_judge.py](src/vlm_judge.py) | Claude vision danger verdict (structured output) |
+| [src/overlay.py](src/overlay.py) | Debug/demo visualization |
+| [src/watchdog.py](src/watchdog.py) | Main loop wiring the layers together |
+
+## Setup
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # then add your ANTHROPIC_API_KEY
+```
+
+> MediaPipe is optional — if it isn't installed the system falls back to
+> person-box proximity instead of fingertip precision.
+
+## Run
+
+```bash
+python main.py             # live webcam
+python main.py --video clip.mp4   # analyze a recorded clip
+```
+
+Press `q` to quit. Alerts stream to the console and to `watchdog_events.jsonl`.
+
+## Tuning precision
+
+Everything lives in [config.py](config.py):
+- `blade_tip_to_hand_px` — how close the tip must be to a fingertip to fire.
+- `blade_aim_angle_deg` — how directly the blade must point at the hand (smaller =
+  must be aimed straight at it) to escalate to *critical*.
+- `yolo_model` — `yolov8n-seg.pt` (fast) → `yolov8s-seg.pt` / `yolov8m-seg.pt` for
+  more accurate masks.
+- `vlm_model` — `claude-opus-4-8` (best), `claude-sonnet-4-6` (faster),
+  `claude-haiku-4-5` (cheapest) for higher fps on the reasoning layer.
+
+## Notes & next steps
+
+- Distances are in **pixels** (image space). For a real test rig, calibrate to cm
+  with a known-size reference object or a depth camera.
+- COCO has no "stove"/"robot arm" classes; we proxy with `oven`/`microwave` and
+  treat held sharp/fragile objects as the manipulated item. A fine-tuned model on
+  kitchen + robot-arm classes is the obvious upgrade.
+- The `recommended_action` field (`stop`/`slow_down`/...) is the natural hook for a
+  real kill-switch / robot-control integration.
