@@ -12,7 +12,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 
 class RangeHandler(SimpleHTTPRequestHandler):
+    _rng = None  # default so copyfile never hits AttributeError (e.g. directory/index)
+
     def send_head(self):
+        self._rng = None
         path = self.translate_path(self.path)
         if os.path.isdir(path):
             return super().send_head()
