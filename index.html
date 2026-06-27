@@ -188,7 +188,7 @@
       <button data-mode="rgb" class="on">RGB</button>
       <button data-mode="seg" data-model="SAM">◧ Segmentation</button>
       <button data-mode="depth" data-model="Depth-Anything">▦ Depth</button>
-      <button data-mode="boxes" data-model="Grounding-DINO">▭ Detection</button>
+      <button data-mode="boxes" data-model="LocateAnything">▭ Detection</button>
     </div>
     <button class="navbtn" id="btn-configure">⚙ Configure Robot</button>
     <button class="navbtn" id="btn-perception">🧠 Perception Stack</button>
@@ -312,7 +312,7 @@
     <div class="modal">
       <div class="mhd">🧠 Perception Stack <button class="x" data-close>×</button></div>
       <div class="mbd" id="perc-list">
-        <div class="row" data-model="Grounding-DINO" data-mode="boxes"><div class="lab"><b>Grounding-DINO</b><small>open-vocab detection</small></div><span class="lat">31 ms</span><div class="sw on" data-perc></div></div>
+        <div class="row" data-model="LocateAnything" data-mode="boxes"><div class="lab"><b>LocateAnything-3B</b><small>NVIDIA · open-vocab localization</small></div><span class="lat">3B · GPU</span><div class="sw on" data-perc></div></div>
         <div class="row" data-model="SAM" data-mode="seg"><div class="lab"><b>Segment Anything (SAM)</b><small>semantic segmentation</small></div><span class="lat">48 ms</span><div class="sw on" data-perc></div></div>
         <div class="row" data-model="RAM"><div class="lab"><b>RAM</b><small>recognize-anything tagging</small></div><span class="lat">22 ms</span><div class="sw on" data-perc></div></div>
         <div class="row" data-model="Depth-Anything" data-mode="depth"><div class="lab"><b>Depth-Anything v2</b><small>monocular depth</small></div><span class="lat">37 ms</span><div class="sw on" data-perc></div></div>
@@ -559,7 +559,7 @@
     const b = e.target.closest("button"); if (!b || b.classList.contains("disabled")) return;
     [...segCtl.children].forEach((x) => x.classList.toggle("on", x === b));
     visionMode = b.dataset.mode;
-    const tag = { seg: "SAM · segmentation", depth: "Depth-Anything v2", boxes: "Grounding-DINO" }[visionMode] || "";
+    const tag = { seg: "SAM · segmentation", depth: "Depth-Anything v2", boxes: "LocateAnything-3B" }[visionMode] || "";
     feedTiles.forEach((t) => {
       t.el.classList.toggle("fx-on", visionMode !== "rgb");
       t.el.querySelector(".mode-tag").textContent = tag;
