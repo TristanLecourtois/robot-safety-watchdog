@@ -1,0 +1,476 @@
+[
+  {
+    "t": 0.0,
+    "cam": "SYSTEM",
+    "severity": "info",
+    "msg": "Watchdog online \u2014 monitoring 3 feeds"
+  },
+  {
+    "t": 1.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Two robot arms positioned over food plates; gripper near cookie/pizza\u2014pinch hazard if arms"
+  },
+  {
+    "t": 1.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Multiple loose cables on floor between gripper arms; trip/snag hazard if grippers move."
+  },
+  {
+    "t": 1.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Table: pizza slice on napkin, plate w/ cookie+foil, knife lying flat nearby; no hands visi"
+  },
+  {
+    "t": 11.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Two robot arms on desk near pizza slice on plate; human hands typing on laptop; no immedia"
+  },
+  {
+    "t": 11.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper cam: multiple loose cables tangled across work surface; trip/snag hazard near grip"
+  },
+  {
+    "t": 11.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Knife unattended on table near robot workspace; pizza slice and plate visible, no hand con"
+  },
+  {
+    "t": 21.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Dual robot arms hovering over plate/pizza; gripper near food items, no human hands in robo"
+  },
+  {
+    "t": 21.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robotic gripper approaching pizza slice on paper plate; contact/spill risk imminent."
+  },
+  {
+    "t": 21.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Right arm gripper hovering over plate; knife on table near left arm end-effector."
+  },
+  {
+    "t": 31.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Dual robot arms poised over desk; pizza slice on plate below gripper; no contact detected."
+  },
+  {
+    "t": 31.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper arm near loose knife on table; blade exposed beside food plates."
+  },
+  {
+    "t": 31.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms over table; pizza slice on napkin, cup on plate; no hazard detected."
+  },
+  {
+    "t": 41.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Dual robot arms active near pizza slice & plate; human hands on laptop ~60cm away"
+  },
+  {
+    "t": 41.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robotic gripper hovering over plate; loose knife on table nearby unguarded."
+  },
+  {
+    "t": 41.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Two robot arms active over table; right gripper hovering over plate with food item; sharp "
+  },
+  {
+    "t": 51.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Dual robot arms active near pizza plate; gripper close to food item, no human hands in rea"
+  },
+  {
+    "t": 51.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robot gripper hovering over table; knife visible in gripper zone\u2014no hand contact yet"
+  },
+  {
+    "t": 51.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms over table; right gripper contacts plate, left holds food item. No hazard."
+  },
+  {
+    "t": 61.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Robot arm near pizza plate; human hands typing on laptop; no contact hazard detected."
+  },
+  {
+    "t": 61.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Pizza slice on plate balanced atop gripper jaw\u2014unstable, likely to tip/spill if arm moves."
+  },
+  {
+    "t": 61.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms over table; left grips object, right contacts plate near pizza slice."
+  },
+  {
+    "t": 71.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Two robot arms on table near pizza slice; hands typing on laptop; no imminent hazard."
+  },
+  {
+    "t": 71.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Gripper cam: robot arms near plate w/ food item; no imminent hazard detected."
+  },
+  {
+    "t": 71.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms handling food items (pizza slice, pastry) on table; no human hands visible,"
+  },
+  {
+    "t": 81.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Human hand reaching near robot arm workspace beside pizza plate; arm proximity risk."
+  },
+  {
+    "t": 81.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Gripper cam: robot arm gripping black plastic bag; small robot figurine and food plate vis"
+  },
+  {
+    "t": 81.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Dual robot arms handling pizza slice on plate; no human hands visible, operation nominal."
+  },
+  {
+    "t": 91.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Human hand near robot arm end-effector beside pizza plate; pinch/crush risk if arm moves."
+  },
+  {
+    "t": 91.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Robot gripper holding small bottle; no hands near mechanism; food plate visible on table."
+  },
+  {
+    "t": 91.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Dual robot arms handling pizza slice on table; no human hands visible, operation nominal."
+  },
+  {
+    "t": 101.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Human hand reaching near robot gripper end-effector beside pizza plate; contact risk."
+  },
+  {
+    "t": 101.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper cam tumbling; white disc/spool in motion, unstable camera angle\u2014verify gripper sec"
+  },
+  {
+    "t": 101.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Two robot arms over table; knife visible near left arm; pizza slice and food on plate pres"
+  },
+  {
+    "t": 111.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Human hand reaching near robot arm gripper zone beside pizza plate; proximity risk."
+  },
+  {
+    "t": 111.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Robot gripper hovering over desk; pizza slice on plate nearby, no contact detected."
+  },
+  {
+    "t": 111.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms on table; left gripper touching pizza slice, right arm at plate. No hazard."
+  },
+  {
+    "t": 121.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Robot arm (right) in motion near pizza plate; human hand holding cookie close to active ar"
+  },
+  {
+    "t": 121.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper jaws open near table; knife visible between arms, hand near utensil/plate above."
+  },
+  {
+    "t": 121.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Human hand near robot gripper/utensil beside pizza slice; risk of pinch/contact."
+  },
+  {
+    "t": 131.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Person leaning over laptop; dual robot arms near pizza plate; no active hazard."
+  },
+  {
+    "t": 131.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Gripper cam: pizza slice on plate, hand reaching nearby, no contact hazard detected."
+  },
+  {
+    "t": 131.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Human hand near active robot arm gripper; two arms operating over pizza slice on table."
+  },
+  {
+    "t": 141.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Dual robot arms hovering over plate near pizza; gripper close to food items, pinch risk if"
+  },
+  {
+    "t": 141.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robot gripper open near table edge; hand visible reaching toward utensil by pizza plate."
+  },
+  {
+    "t": 141.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Robot arm hovering over plate; human hand near robot base\u2014risk of pinch/contact."
+  },
+  {
+    "t": 151.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Robot arm gripping near paper plate; knife loose on table, no hand contact yet"
+  },
+  {
+    "t": 151.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robot gripper open near table edge; hand reaches toward pizza plate\u2014collision risk."
+  },
+  {
+    "t": 151.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Robot arm gripper near knife on table; blade unguarded, arm in proximity."
+  },
+  {
+    "t": 161.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Knife lying unsheathed on desk near robot arms and pizza plate; no hand contact but proxim"
+  },
+  {
+    "t": 161.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Robot gripper arm approaching pizza slice on plate; pinch/crush risk near food item"
+  },
+  {
+    "t": 161.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Right robot arm gripper hovering near human hand bottom-right; knife visible on table ungu"
+  },
+  {
+    "t": 171.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Robot arm gripper descending near human hand over pizza plate; possible pinch risk."
+  },
+  {
+    "t": 171.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper jaws straddling knife blade on table; blade edge near gripper contact points"
+  },
+  {
+    "t": 171.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Two robot arms near plate; left arm holds small blade/utensil close to food items."
+  },
+  {
+    "t": 181.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Robot arm with gripper hovering over paper plate near food; utensil contact risk"
+  },
+  {
+    "t": 181.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper arm hovering low over plate w/ food on table; risk of collision/spill."
+  },
+  {
+    "t": 181.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Dual robot arms on table; pizza slice on plate below; no imminent hazard detected."
+  },
+  {
+    "t": 191.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Hand reaching into dual robot arm workspace near moving joints; pizza plate below arm."
+  },
+  {
+    "t": 191.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper jaws flanking a dinner knife blade on table; risk of blade contact on grip."
+  },
+  {
+    "t": 191.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms over table; one gripping item on plate, pizza slice on napkin below. No haz"
+  },
+  {
+    "t": 201.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Dual robot arms hovering over food plate; knife visible on table near gripper reach zone."
+  },
+  {
+    "t": 201.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Gripper cam: two black grippers over white plate with food remnants on wood surface."
+  },
+  {
+    "t": 201.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Two robot arms near plate/food; knife on table unattended between arms."
+  },
+  {
+    "t": 211.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Dual robot arms idle over table; pizza slice on plate, no hands near arms."
+  },
+  {
+    "t": 211.0,
+    "cam": "GRIPPER CAM",
+    "severity": "info",
+    "msg": "Gripper cam at table; pizza slice and pastry on plates, human hand idle nearby."
+  },
+  {
+    "t": 211.0,
+    "cam": "HEAD CAM",
+    "severity": "critical",
+    "msg": "Robot arm gripper/tool tip within ~2cm of human hand near pizza slice."
+  },
+  {
+    "t": 221.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Person leaning over plate; robot arm gripper hovering near hand/food\u2014contact risk."
+  },
+  {
+    "t": 221.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper holding plate with food; plate edge tilted, spill risk if grip shifts."
+  },
+  {
+    "t": 221.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Robot arm gripping knife over plate; blade near food item, no human hands visible but shar"
+  },
+  {
+    "t": 231.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Human hand reaching near dual robot arm gripper; potential pinch hazard."
+  },
+  {
+    "t": 231.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper arm near food debris on plate; pizza slice on table, no hands visible. Risk of foo"
+  },
+  {
+    "t": 231.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Human hand near dual robot arm gripper mechanism; pinch/crush risk at joint."
+  },
+  {
+    "t": 241.0,
+    "cam": "SCENE CAM",
+    "severity": "warning",
+    "msg": "Hand reaching into dual robot-arm workspace near active gripper/claw end-effector."
+  },
+  {
+    "t": 241.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Hand gripping blade/tool near knife sharpener; fingers close to sharp elements"
+  },
+  {
+    "t": 241.0,
+    "cam": "HEAD CAM",
+    "severity": "warning",
+    "msg": "Human hand near dual robot arms manipulating plate; pinch/crush risk at gripper joints."
+  },
+  {
+    "t": 251.0,
+    "cam": "SCENE CAM",
+    "severity": "info",
+    "msg": "Dual robot arms on desk near pizza slice plate; no contact or hazard detected."
+  },
+  {
+    "t": 251.0,
+    "cam": "GRIPPER CAM",
+    "severity": "warning",
+    "msg": "Gripper holding knife blade-up on table; no hand contact but sharp edge exposed upward."
+  },
+  {
+    "t": 251.0,
+    "cam": "HEAD CAM",
+    "severity": "info",
+    "msg": "Two robot arms over table; right gripper near plate with food item; pizza slice below on n"
+  }
+]
