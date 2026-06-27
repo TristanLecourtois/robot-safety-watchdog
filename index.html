@@ -555,6 +555,19 @@
   }
   setInterval(() => { if (master && master.duration) tlHead.style.left = (master.currentTime / master.duration * 100) + "%"; }, 120);
 
+  // click the timeline to scrub the whole demo to that moment
+  let logPtr = 0, logPrevT = 0;
+  function seekTo(frac) {
+    if (!master || !master.duration) return;
+    const t = Math.max(0, Math.min(0.999, frac)) * master.duration;
+    vids.forEach((v) => { if (v.duration) { try { v.currentTime = Math.min(t, v.duration - 0.1); } catch (e) {} } });
+    const d = window.logsData;
+    if (d && d.length) { let i = 0; while (i < d.length && d[i].t <= t) i++; logPtr = i; logPrevT = t; }
+    tlHead.style.left = (frac * 100) + "%";
+  }
+  tlBar.style.cursor = "pointer";
+  tlBar.addEventListener("click", (e) => { const r = tlBar.getBoundingClientRect(); seekTo((e.clientX - r.left) / r.width); });
+
   async function initLogs() {
     if (logsStarted) return; logsStarted = true;
     let data = null;
@@ -563,13 +576,13 @@
     data.sort((a, b) => a.t - b.t);
     window.logsData = data;       // feed the predictive future rollouts
     buildTimeline(data);
-    let ptr = 0, prevT = 0;
+    logPtr = 0; logPrevT = 0;
     setInterval(() => {
       if (!master) return;
       const ct = master.currentTime;
-      if (ct < prevT - 0.5) ptr = 0;
-      prevT = ct;
-      while (ptr < data.length && data[ptr].t <= ct) { const e = data[ptr++]; emit(e.severity, e.cam, e.msg); }
+      if (ct < logPrevT - 0.5) logPtr = 0;
+      logPrevT = ct;
+      while (logPtr < data.length && data[logPtr].t <= ct) { const e = data[logPtr++]; emit(e.severity, e.cam, e.msg); }
     }, 250);
   }
   // ===== vision modes on the 2 feeds (RGB / SAM seg / Depth / DINO boxes) =====
