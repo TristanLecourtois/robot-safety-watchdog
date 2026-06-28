@@ -1,10 +1,43 @@
-# Robot Safety Vision Watchdog
+# VIGIE: Robot Safety Watchdog
 
-An **independent, external** vision watchdog for learning-based home robots. It
-watches a robot operate (starting with the kitchen — 47% of household injuries)
-and flags dangerous situations in real time, without trusting what the robot
-*intends* to do. This is the "crash-test / SOC 2 for robotic safety" thesis made
-concrete: we don't verify the model's weights, we **measure observed behavior**.
+VIGIE is an **external runtime safety layer** for learning-based robots. It
+observes the robot and workspace through cameras, detects dangerous situations,
+logs evidence, and can interrupt a real OpenARM/LeRobot run by pausing,
+holding, and resuming the robot when the scene becomes safe again.
+
+Built for the hackathon demo, the project combines three proof points:
+
+- **See danger**: live vision detects hands, sharp tools, and unsafe spatial relations.
+- **Decide deterministically**: auditable policies turn scene evidence into
+  `ALLOW`, `BLOCK`, `PAUSE`, `STOP`, or `RESUME`.
+- **Act on hardware**: the harness can pause a recorded OpenARM replay in the
+  middle of execution, hold pose, and resume after fresh safe frames.
+
+The thesis is simple: we do not claim to certify neural policy weights. We
+measure observed behavior at runtime and provide the missing safety layer around
+robot pilots.
+
+## Hackathon demo in one line
+
+**VIGIE watches a robot from the outside, detects unsafe scenes, and can pause a
+real OpenARM/LeRobot replay before the robot keeps moving.**
+
+What is demo-ready:
+
+- **Live vision watchdog**: YOLO/YOLOE + deterministic geometry rules + optional
+  Claude vision judgment.
+- **OpenARM safety harness**: replay a recorded LeRobot episode, pause on camera
+  danger, hold pose, then resume after the workspace clears.
+- **Rerun visualization**: camera frame, detections, hazards, harness mode, and
+  pause/resume decisions.
+- **Web dashboard**: synchronized feeds, safety timeline, VLM logs, and
+  future-preview artifacts from `main`.
+- **Research tracks**: V-JEPA latent OOD monitor and Stable Video Diffusion
+  future preview for “predict before harm” demos.
+
+This is not a model-weight verifier or a certification claim. It is a runtime
+evidence layer: observe the robot, make auditable deterministic safety decisions,
+and intervene only through control surfaces the robot actually exposes.
 
 ## Why this design
 
@@ -22,38 +55,59 @@ concrete: we don't verify the model's weights, we **measure observed behavior**.
   1-4 s, so it can't run at 30 fps. The fast layer gives instant reflexes; the VLM
   runs async so it never stalls the loop, and the overlay shows its latest verdict.
 
-## Architecture
+## Architecture Overview
 
-```
- camera ─▶ Layer 1: Perception (every frame)
-           ├─ YOLOE (open-vocab seg) → masks + classes for ANY prompted object
-           │    (knife, cleaver, stove, flame, "hand", … — edit the prompt list)
-           └─ MediaPipe → 21 hand landmarks (where wheels exist; else "hand" prompt)
-                 │
-                 ▼
-           orientation.py → blade axis / tip / angle (PCA on mask)
-                 │
-                 ▼
- Layer 1.5: Rule engine (deterministic, real-time)
-   • blade tip → nearest fingertip distance
-   • blade aim angle (is it pointing AT the hand?)
-   • fragile object fast-motion (drop risk)
-   • object near hot zone (oven/stove)
-                 │  on hit (or idle timer)
-                 ▼
- Layer 2: VLM judge (Claude vision) — GENERALIST, runs continuously, async
-   • open-vocabulary: any hazard, not a fixed list
-   • returns: dangerous? severity? category? rationale? recommended_action?
-                 │
-                 ▼
-        JSONL event log  +  live overlay  (+ kill-switch hook)
+VIGIE is organized as a runtime safety stack around the robot, not inside the
+robot policy. Each layer can be demonstrated independently, then combined for
+the full hackathon story.
 
- Parallel WORLD-MODEL track (optional, --worldmodel):
-   V-JEPA 2 encodes short clips → latent space → OOD danger score
-   • learns what "normal/safe" operation looks like (no danger labels)
-   • flags moments that drift out of that distribution as surprising/unsafe
-   • live 2D PCA map: green = normal cloud, moving dot = current situation
+```text
+External cameras
+      |
+      v
+Perception layer
+  YOLO / YOLOE segmentation, hand/person/tool detection,
+  optional MediaPipe fingertips, blade geometry via PCA
+      |
+      v
+Scene context
+  objects, detections, zones, hazards, rule hits, evidence frame ids
+      |
+      v
+Deterministic safety layer
+  PolicyEngine + RuntimeWatchdogSupervisor
+  ALLOW / BLOCK / PAUSE / STOP / RESUME
+      |
+      +----------------------------+
+      |                            |
+      v                            v
+Audit and visualization       Robot control harness
+  JSONL evidence              OpenARM / LeRobot adapter
+  live overlay                pause -> hold pose -> resume
+  Rerun timeline              recorded replay interruption
+  web dashboard
 ```
+
+### Core Runtime Loop
+
+1. **Observe**: external webcams keep running while the robot moves.
+2. **Parse**: the watchdog turns frames into a `scene_context`.
+3. **Decide**: deterministic policies decide whether motion is safe.
+4. **Intervene**: the OpenARM harness pauses, sends a hold action, and resumes
+   only after fresh safe frames.
+5. **Prove**: every decision can be logged with frame-level evidence and shown
+   in Rerun or the dashboard.
+
+### Project Tracks
+
+| Track | Purpose | Demo artifact |
+|------|---------|---------------|
+| Fast symbolic watchdog | Detect concrete hazards such as hand near sharp tool | live overlay, JSONL alerts |
+| OpenARM harness | Show safety control on real hardware or replay | pause/hold/resume during LeRobot replay |
+| Rerun visualization | Explain why the harness paused | camera feed, YOLO boxes, decision timeline |
+| Web dashboard | Presentation view for judges | synchronized feeds, logs, safety timeline |
+| V-JEPA world model | Flag out-of-distribution behavior | latent OOD panel |
+| Generative future preview | Imagine near-future risk before it happens | future strip, preventive veto |
 
 ### World-model track (V-JEPA 2 latent OOD)
 
@@ -112,6 +166,10 @@ uv run --extra generative python scripts/imagine_future.py \
 | [src/vlm_judge.py](src/vlm_judge.py) | Claude vision danger verdict (structured output) |
 | [src/overlay.py](src/overlay.py) | Debug/demo visualization |
 | [src/watchdog.py](src/watchdog.py) | Main loop wiring the layers together |
+| [harness/](harness/) | Runtime robot safety harness for OpenARM/LeRobot |
+| [harness/RUNBOOK.md](harness/RUNBOOK.md) | Hackathon commands for OpenARM pause/replay demos |
+| [dashboard.py](dashboard.py) / [index.html](index.html) | Web dashboard and synchronized demo timeline |
+| [scripts/](scripts/) | Future-preview, VLM-log, and Reachy helper scripts |
 
 ## Setup & Run (uv — recommended)
 
@@ -141,6 +199,41 @@ python main.py
 
 > MediaPipe is optional — if it isn't installed the system falls back to
 > person-box proximity instead of fingertip precision.
+
+## OpenARM / LeRobot harness demo
+
+The harness is the robot-control layer. It does not need a VLA policy. It can
+wrap a LeRobot replay and pause it when the external camera watchdog sees a
+dangerous scene.
+
+Control-surface smoke test:
+
+```bash
+python3 -m harness.scripts.openarm_pause_resume \
+  --robot-factory harness.scripts.openarm_robot_factory:build_robot \
+  --connect --motion --stop-mode hold
+```
+
+Replay-with-danger demo:
+
+```bash
+python3 -m harness.scripts.openarm_replay_watchdog \
+  --robot-factory harness.scripts.openarm_robot_factory:build_robot \
+  --dataset-repo-id local/cut_20260628_042259 \
+  --dataset-root "/path/to/lerobot_dataset_root" \
+  --episode 0 \
+  --connect \
+  --camera-index /dev/video4 \
+  --pause-on sharp-hand \
+  --unsafe-frames-before-pause 4 \
+  --clear-frames-before-resume 5 \
+  --detector-backend yolo \
+  --yolo-model yolo11n-seg.pt \
+  --rerun
+```
+
+For the exact OpenARM commands used during the hackathon prep, see
+[harness/RUNBOOK.md](harness/RUNBOOK.md).
 
 ## Tuning precision
 

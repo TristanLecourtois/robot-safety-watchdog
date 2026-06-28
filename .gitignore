@@ -4,10 +4,12 @@ __pycache__/
 venv/
 .env
 *.pt
+*.jsonl
+*.rrd
 *.ts
 mobileclip*
 .textpe_cache.pt
-watchdog_events.jsonl
+runs/
 .DS_Store
 
 reachy-mini-desktop-app/

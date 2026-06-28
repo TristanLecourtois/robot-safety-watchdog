@@ -1,0 +1,431 @@
+# OpenARM / LeRobot Integration Notes
+
+This is the minimal integration guide for plugging the harness into an OpenARM setup controlled through LeRobot.
+
+LeRobot `main` inspection reference used for this guide:
+`3dd19d043e2f3fe5673b13ea0ebe4f31884c0797`.
+
+## 0. Fresh Clone To LeRobot Integration Test
+
+This section explains how to test the harness integration from a fresh clone,
+including the real LeRobot Python package, without connecting OpenARM hardware.
+
+You do not need a robot-side policy model for these tests. The smoke test uses:
+
+- deterministic harness policies from `harness/policy.py`;
+- fake perception outputs that simulate safe and dangerous scenes;
+- either a fake controller, a fake LeRobot-shaped robot, or the real LeRobot
+  package with a fake `lerobot.robots.Robot` subclass.
+
+### 0.1 Clone The Watchdog Repo
+
+```bash
+cd ~
+git clone <your-watchdog-repo-url> robot-safety-watchdog
+cd ~/robot-safety-watchdog
+```
+
+If you are already inside `~/robot-safety-watchdog`, do not run
+`cd robot-safety-watchdog` again. That would try to enter
+`~/robot-safety-watchdog/robot-safety-watchdog`.
+
+### 0.2 First Test: Harness Only
+
+Run:
+
+```bash
+python3 -m harness.scripts.openarm_smoke
+```
+
+This does not import LeRobot and does not use OpenARM. It only verifies:
+
+- dangerous scene -> `BLOCK`;
+- safe scene -> `ALLOW`;
+- runtime danger -> `PAUSE`;
+- safe frames after pause -> `RESUME`;
+- the adapter calls a mock controller.
+
+Expected important output:
+
+```text
+command gate unsafe scene: BLOCK
+command gate safe scene:   ALLOW
+runtime frame 0:          PAUSE -> mode=PAUSED
+runtime frame 2:          ALLOW -> mode=RUNNING, resume
+controller calls:           [('execute', ...), ('pause', ...), ('resume', ...)]
+```
+
+### 0.3 Second Test: LeRobot-Shaped Interface, No LeRobot Package
+
+Run:
+
+```bash
+python3 -m harness.scripts.openarm_smoke --mock-lerobot
+```
+
+This still does not import the real LeRobot package. It uses the harness
+`LeRobotOpenArmController` with fake objects exposing the methods expected from
+LeRobot:
+
+- `send_action()`;
+- `get_observation()`;
+- inference `pause()`;
+- inference `reset()`;
+- inference `resume()`.
+
+Expected important output:
+
+```text
+mock_lerobot_robot calls:
+[('send_action', ...), ('get_observation', None), ('send_action', ...)]
+
+mock_lerobot_inference calls:
+[('pause', None), ('reset', None), ('resume', None)]
+```
+
+This validates the shape of the interface that OpenARM/LeRobot must expose.
+
+### 0.4 Setup The Real LeRobot Package
+
+If LeRobot is already cloned, for example:
+
+```bash
+/home/rached/openarm/lerobot
+```
+
+activate its environment:
+
+```bash
+source /home/rached/openarm/lerobot/.venv/bin/activate
+```
+
+Then verify that Python can import LeRobot:
+
+```bash
+python -c "import lerobot; print(getattr(lerobot, '__version__', 'unknown')); print(lerobot.__file__)"
+```
+
+Expected output should point to something like:
+
+```text
+/home/rached/openarm/lerobot/src/lerobot/__init__.py
+```
+
+If this import fails, either install LeRobot in the active environment:
+
+```bash
+cd /home/rached/openarm/lerobot
+python -m pip install -e .
+```
+
+or temporarily expose the source checkout:
+
+```bash
+export PYTHONPATH=/home/rached/openarm/lerobot/src:$PYTHONPATH
+```
+
+For a stable LeRobot install, the official docs list:
+
+```bash
+python -m pip install lerobot
+```
+
+If you are working against LeRobot `main`, prefer the editable source checkout
+used by your OpenARM setup.
+
+### 0.5 Third Test: Real LeRobot Package, No OpenARM Hardware
+
+From the watchdog repo, with the LeRobot environment still active:
+
+```bash
+cd /home/rached/robot-safety-watchdog
+python -m harness.scripts.openarm_smoke --real-lerobot
+```
+
+This imports the real `lerobot` package, creates a tiny fake robot subclass from
+`lerobot.robots.Robot`, and runs it through `LeRobotOpenArmController`. It does
+not connect to OpenARM hardware.
+
+Expected important output:
+
+```text
+real_lerobot_module:
+{'version': '...', 'module': "<module 'lerobot' from '.../src/lerobot/__init__.py'>"}
+
+real_lerobot_robot calls:
+[('connect', ...), ('send_action', ...), ('get_observation', None), ('send_action', ...)]
+
+real_lerobot_inference calls:
+[('pause', None), ('reset', None), ('resume', None)]
+```
+
+This validates:
+
+- the real LeRobot package is importable;
+- the harness can work with a real LeRobot `Robot` base interface;
+- `ALLOW` reaches `send_action()`;
+- `PAUSE` reaches inference `pause()` and robot `get_observation()`;
+- hold-position action is sent back through `send_action()`;
+- `RESUME` reaches inference `reset()` and `resume()`.
+
+At this point the tested path is:
+
+```text
+simulated vision danger
+-> harness policy
+-> RuntimeWatchdogSupervisor / safe_execute
+-> OpenArmLeRobotAdapter
+-> LeRobotOpenArmController
+-> real LeRobot package
+-> fake LeRobot robot, no OpenARM hardware
+```
+
+### 0.6 Final Test: Real OpenARM Controller
+
+Only after the real-LeRobot test passes, edit `harness/scripts/openarm_smoke.py` and
+replace `build_openarm_controller()` with your real LeRobot/OpenARM setup. Then
+run:
+
+```bash
+cd /home/rached/robot-safety-watchdog
+python -m harness.scripts.openarm_smoke --real-openarm --log harness_events.jsonl
+```
+
+The controller object should expose at least one execution method, for example
+`execute`, `send_action`, `play_trajectory`, or `replay_trajectory`. For runtime
+interaction tests, also expose `pause`, `resume`, and `stop` or
+`emergency_stop`.
+
+For a first hardware run, make the OpenARM action neutral or very small. The
+smoke test intentionally sends a safe `ALLOW` case, so a real controller may
+receive a real command.
+
+## 1. What Works Now
+
+The current harness is easy to plug in for command gating:
+
+- Wrap an OpenARM action, scripted move, teleop replay, or LeRobot action behind `safe_execute`.
+- The harness captures a camera frame.
+- The watchdog produces `scene_context`.
+- `PolicyEngine` returns a decision.
+- `BLOCK` skips the action.
+- `ALLOW` sends the action to your OpenARM controller.
+
+Runtime interruption is also supported by the adapter, but it depends on your controller exposing a real control method:
+
+- `pause`
+- `stop`
+- `emergency_stop`
+- `disconnect`
+- a safe-hold command
+- a neutral action that reliably stops motion
+
+On LeRobot `main`, OpenARM robot classes expose `send_action`, `get_observation`,
+and `disconnect`, but not a standard robot-level `pause` or `resume`. The harness
+therefore provides `LeRobotOpenArmController`, a shim that maps pause/resume
+semantics onto the current LeRobot APIs.
+
+## 2. Expected Controller Surface
+
+`OpenArmLeRobotAdapter` uses duck typing. Your controller can expose any of these methods:
+
+```python
+controller.execute(planned_action_dict)
+controller.run_action(planned_action_dict)
+controller.send_action(action_vector_or_action_dict)
+controller.play_trajectory(trajectory)
+controller.replay_trajectory(trajectory)
+
+controller.pause(affected_arm="both_arms")
+controller.resume(affected_arm="both_arms")
+controller.stop(affected_arm="both_arms")
+controller.emergency_stop()
+controller.disconnect()
+```
+
+You do not need all of them.
+
+For command gating, expose one execution method.
+
+For runtime interruption, expose one stop/pause method.
+
+For OpenARM on current LeRobot `main`, use:
+
+```python
+from harness import LeRobotOpenArmController, OpenArmLeRobotAdapter
+
+controller = LeRobotOpenArmController(
+    robot=openarm_robot,
+    inference_engine=policy_inference_engine,  # optional but recommended
+    interpolator=action_interpolator,          # optional
+    stop_mode="hold",                         # or "disconnect"
+)
+robot = OpenArmLeRobotAdapter(controller=controller)
+```
+
+`pause()` pauses inference if available, reads `robot.get_observation()`, builds a
+hold action from current `.pos` keys, and sends it through `robot.send_action()`.
+
+`resume()` resets the interpolator/inference engine if available, then resumes
+inference. The camera watchdog keeps running outside LeRobot.
+
+`stop()` stops inference and either holds the current pose or disconnects,
+depending on `stop_mode`.
+
+## 3. Command-Gating Example
+
+```python
+import cv2
+
+from harness import OpenArmLeRobotAdapter, WatchdogPerceptionAdapter, safe_execute
+
+camera = cv2.VideoCapture(0)
+perception = WatchdogPerceptionAdapter(camera_id="external_webcam_1")
+robot = OpenArmLeRobotAdapter(controller=openarm_controller)
+
+decision = safe_execute(
+    {
+        "id": "act_pick_knife_001",
+        "type": "pick",
+        "object": "sharp_tool",
+        "arm": "left_arm",
+        "source": "teleop_replay",
+        "payload": {
+            "trajectory": replay_trajectory
+        },
+    },
+    camera=camera,
+    perception_adapter=perception,
+    robot_adapter=robot,
+)
+
+print(decision.decision)
+```
+
+Expected behavior:
+
+- If a hand is near the sharp tool, `decision.decision == "BLOCK"` and no robot execution method is called.
+- If the scene is safe, `decision.decision == "ALLOW"` and the replay/action is sent.
+
+## 4. Runtime Interruption Pattern
+
+Use this when OpenARM is already moving and the external watchdog should pause or stop motion.
+
+The important design point is that the camera loop never stops. When the robot
+is paused, perception keeps running. Once the scene is safe for several
+consecutive frames, the harness may call `resume`.
+
+```python
+import time
+
+from harness import RuntimeWatchdogSupervisor, OpenArmLeRobotAdapter, WatchdogPerceptionAdapter
+
+perception = WatchdogPerceptionAdapter(camera_id="external_webcam_1")
+robot = OpenArmLeRobotAdapter(controller=openarm_controller)
+supervisor = RuntimeWatchdogSupervisor(
+    perception_adapter=perception,
+    robot_adapter=robot,
+    clear_frames_before_resume=10,
+    auto_resume=True,
+)
+
+while True:
+    ok, frame = camera.read()
+    if not ok:
+        break
+
+    state = supervisor.step(frame, now=time.time())
+    print(state.mode, state.last_decision.decision)
+
+    time.sleep(0.02)
+```
+
+`RuntimeWatchdogSupervisor` logs each decision, rate-limits pause calls by state
+transition, and resumes only after `clear_frames_before_resume` safe frames.
+
+Recommended semantics:
+
+- `PAUSE`: can auto-resume after the scene is safe.
+- `STOP`: should usually be terminal and require operator confirmation before any resume.
+- `RESUME`: should go through LeRobot/OpenARM only if your controller supports a safe resume.
+
+## 5. Controller Shim Example
+
+If your LeRobot object does not have the method names expected by the harness, wrap it.
+
+```python
+from harness import LeRobotOpenArmController
+
+controller = LeRobotOpenArmController(
+    robot=openarm_lerobot_robot,
+    inference_engine=ctx.policy.inference,
+    interpolator=interpolator,
+    stop_mode="hold",
+)
+```
+
+Then:
+
+```python
+robot = OpenArmLeRobotAdapter(controller=controller)
+```
+
+If you are inside LeRobot rollout code, the relevant objects are usually:
+
+- `ctx.hardware.robot_wrapper` or `ctx.hardware.robot_wrapper.inner` for the robot.
+- `ctx.policy.inference` for the inference engine.
+- the strategy's `ActionInterpolator` for interpolated action state.
+
+## 6. Important Safety Notes
+
+- Validate `pause` and `stop` on the real OpenARM setup before presenting runtime interruption.
+- Treat both arms as `both_arms` by default.
+- Use `BLOCK` only before sending an action.
+- Use `PAUSE` or `STOP` after motion has started.
+- Keep the VLM out of the critical interruption path.
+- Log the scene context, decision, and robot command result for every intervention.
+
+## 7. Integration Checklist
+
+- [ ] Identify the actual OpenARM/LeRobot controller object.
+- [ ] Record the exact LeRobot version or commit used by the OpenARM setup.
+- [ ] Confirm how to send a scripted action or teleop replay.
+- [ ] Confirm whether `pause`, `stop`, `emergency_stop`, or safe hold exists.
+- [ ] Create a shim if method names or control semantics differ.
+- [ ] Run dry-run gating first.
+- [ ] Test `BLOCK`: no action is sent.
+- [ ] Test `ALLOW`: the intended action executes.
+- [ ] Test `PAUSE` or `STOP`: both arms stop or hold safely.
+- [ ] Keep the camera watchdog running while paused.
+- [ ] Test `RESUME`: only after several safe frames and, ideally, operator approval.
+- [ ] Record JSONL events for dashboard/report.
+
+## 8. Do We Need The LeRobot Version?
+
+For the generic harness architecture: no. The adapter is duck-typed and only
+needs a Python object with execution and pause/stop/resume methods.
+
+For a correct real OpenARM integration: yes, it is strongly recommended. LeRobot
+APIs, robot wrappers, and action formats can differ across versions or commits.
+Record at least:
+
+```bash
+python -c "import lerobot; print(getattr(lerobot, '__version__', 'unknown'))"
+pip show lerobot
+git -C /path/to/lerobot rev-parse HEAD
+```
+
+If LeRobot has no installed package version in your setup, keep the git commit
+hash for the LeRobot checkout used to control OpenARM.
+
+## 9. Relevant LeRobot Main APIs
+
+Observed on LeRobot `main` commit `3dd19d043e2f3fe5673b13ea0ebe4f31884c0797`:
+
+- `Robot` base class defines `connect`, `get_observation`, `send_action`, and `disconnect`.
+- `OpenArmFollower.send_action(action, custom_kp=None, custom_kd=None)` sends `.pos` motor goals after joint-limit clipping.
+- `OpenArmFollower.disconnect()` disconnects the CAN bus and cameras.
+- `BiOpenArmFollower.send_action(action, ...)` splits `left_` and `right_` prefixed action keys and calls each arm's `send_action`.
+- `InferenceEngine` defines optional `pause()` and `resume()` hooks.
+- RTC inference implements `pause()` and `resume()` by clearing/setting its active thread event.
+- DAgger's pause behavior is a useful reference: pause the engine, keep sending the last action to hold position, then reset/resume the engine when returning to autonomous mode.
