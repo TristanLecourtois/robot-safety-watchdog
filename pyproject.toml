@@ -38,9 +38,13 @@ worldmodel = [
     "einops>=0.7",
     "scikit-learn>=1.3",  # PCA for the latent map + simple OOD model
 ]
+demo = ["rerun-sdk>=0.23"]
 
 [project.scripts]
 watchdog = "main:main"
+openarm-harness-smoke = "harness.scripts.openarm_smoke:main"
+openarm-harness-pause = "harness.scripts.openarm_pause_resume:main"
+openarm-harness-replay-watchdog = "harness.scripts.openarm_replay_watchdog:main"
 
 [tool.uv]
 # Nothing special needed; listed for discoverability.

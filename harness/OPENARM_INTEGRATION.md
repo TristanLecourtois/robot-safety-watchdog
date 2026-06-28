@@ -34,7 +34,7 @@ If you are already inside `~/robot-safety-watchdog`, do not run
 Run:
 
 ```bash
-python3 -m harness.openarm_smoke
+python3 -m harness.scripts.openarm_smoke
 ```
 
 This does not import LeRobot and does not use OpenARM. It only verifies:
@@ -60,7 +60,7 @@ controller calls:           [('execute', ...), ('pause', ...), ('resume', ...)]
 Run:
 
 ```bash
-python3 -m harness.openarm_smoke --mock-lerobot
+python3 -m harness.scripts.openarm_smoke --mock-lerobot
 ```
 
 This still does not import the real LeRobot package. It uses the harness
@@ -139,7 +139,7 @@ From the watchdog repo, with the LeRobot environment still active:
 
 ```bash
 cd /home/rached/robot-safety-watchdog
-python -m harness.openarm_smoke --real-lerobot
+python -m harness.scripts.openarm_smoke --real-lerobot
 ```
 
 This imports the real `lerobot` package, creates a tiny fake robot subclass from
@@ -182,13 +182,13 @@ simulated vision danger
 
 ### 0.6 Final Test: Real OpenARM Controller
 
-Only after the real-LeRobot test passes, edit `harness/openarm_smoke.py` and
+Only after the real-LeRobot test passes, edit `harness/scripts/openarm_smoke.py` and
 replace `build_openarm_controller()` with your real LeRobot/OpenARM setup. Then
 run:
 
 ```bash
 cd /home/rached/robot-safety-watchdog
-python -m harness.openarm_smoke --real-openarm --log harness_events.jsonl
+python -m harness.scripts.openarm_smoke --real-openarm --log harness_events.jsonl
 ```
 
 The controller object should expose at least one execution method, for example

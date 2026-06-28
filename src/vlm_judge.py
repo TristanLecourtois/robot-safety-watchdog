@@ -83,7 +83,7 @@ class Verdict:
 class VLMJudge:
     def __init__(self, model: str):
         self.model = model
-        self.client = anthropic.Anthropic() if _SDK else None
+        self.client = anthropic.Anthropic() if _SDK and model else None
 
     @property
     def available(self) -> bool:

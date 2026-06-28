@@ -14,6 +14,7 @@ from harness.policy import PolicyEngine, default_policies
 class RuntimeSupervisorState:
     mode: str = "RUNNING"  # RUNNING | PAUSED | STOPPED
     clear_frames: int = 0
+    unsafe_frames: int = 0
     last_decision: Decision | None = None
     last_robot_result: RobotCommandResult | None = None
 
@@ -35,6 +36,7 @@ class RuntimeWatchdogSupervisor:
         policy_engine: PolicyEngine | None = None,
         logger: JsonlAuditLogger | None = None,
         clear_frames_before_resume: int = 10,
+        unsafe_frames_before_pause: int = 1,
         auto_resume: bool = True,
         stop_is_terminal: bool = True,
     ):
@@ -44,6 +46,7 @@ class RuntimeWatchdogSupervisor:
         self.policy_engine = policy_engine or PolicyEngine()
         self.logger = logger or JsonlAuditLogger()
         self.clear_frames_before_resume = clear_frames_before_resume
+        self.unsafe_frames_before_pause = max(1, unsafe_frames_before_pause)
         self.auto_resume = auto_resume
         self.stop_is_terminal = stop_is_terminal
         self.state = RuntimeSupervisorState()
@@ -82,10 +85,14 @@ class RuntimeWatchdogSupervisor:
         if decision.decision == "STOP":
             self.state.mode = "STOPPED"
             self.state.clear_frames = 0
+            self.state.unsafe_frames = 0
             return self.robot_adapter.stop(decision.affected_arm)
 
         if decision.decision == "PAUSE":
             self.state.clear_frames = 0
+            self.state.unsafe_frames += 1
+            if self.state.unsafe_frames < self.unsafe_frames_before_pause:
+                return None
             if self.state.mode != "PAUSED":
                 self.state.mode = "PAUSED"
                 return self.robot_adapter.pause(decision.affected_arm)
@@ -93,6 +100,7 @@ class RuntimeWatchdogSupervisor:
 
         safe_now = decision.decision in ("ALLOW", "WARN")
         if self.state.mode == "PAUSED" and safe_now:
+            self.state.unsafe_frames = 0
             self.state.clear_frames += 1
             if self.auto_resume and self.state.clear_frames >= self.clear_frames_before_resume:
                 self.state.mode = "RUNNING"
@@ -101,6 +109,7 @@ class RuntimeWatchdogSupervisor:
             return None
 
         if self.state.mode == "RUNNING" and safe_now:
+            self.state.unsafe_frames = 0
             self.state.clear_frames = min(self.state.clear_frames + 1, self.clear_frames_before_resume)
             return None
 

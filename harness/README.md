@@ -1,18 +1,47 @@
-# Safety Harness Package
+# Safety Harness
 
-This package is the runtime harness layer around the existing watchdog code.
+Runtime safety layer for OpenARM/LeRobot pilots.
 
-Current implementation:
+Core path:
 
-- `WatchdogPerceptionAdapter` calls `src.watchdog.Watchdog.process_frame(frame)`.
-- `PolicyEngine` converts the resulting scene context into `ALLOW`, `BLOCK`, `PAUSE`, `STOP`, or `RESUME`.
-- `OpenArmLeRobotAdapter` gates real OpenARM control through an injected LeRobot/OpenARM controller.
-- `LeRobotOpenArmController` adapts current LeRobot `main` OpenARM robots by using `send_action`, `get_observation`, inference `pause/resume`, and hold-position actions.
-- `safe_execute` is the command-gating entry point: unsafe decisions skip the robot action.
-- `RuntimeWatchdogSupervisor` is the runtime loop helper: keep cameras running, pause/stop on danger, resume after safe frames.
-- `JsonlAuditLogger` writes decision evidence to `harness_events.jsonl`.
+```text
+camera frame -> watchdog scene_context -> deterministic policy -> robot pause/hold/resume
+```
 
-For OpenARM-specific setup details, see [OPENARM_INTEGRATION.md](OPENARM_INTEGRATION.md).
+The VLA/VLM is not required for interruption. Vision can be YOLO/YOLOE; the
+harness decision is deterministic and auditable.
+
+## Package Layout
+
+- `core.py`: `safe_execute` command gating.
+- `runtime.py`: `RuntimeWatchdogSupervisor` for pause/resume while motion is already running.
+- `policy.py`: deterministic `ALLOW`, `BLOCK`, `PAUSE`, `STOP`, `RESUME` decisions.
+- `robot.py`: OpenARM/LeRobot adapters and hold-position controller shim.
+- `perception.py`: adapter from watchdog outputs to harness `scene_context`.
+- `logger.py`: JSONL audit logging.
+- `scripts/`: hardware and hackathon demo entry points.
+- `RUNBOOK.md`: commands for the OpenARM hackathon demos.
+- `OPENARM_INTEGRATION.md`: longer integration notes and API expectations.
+
+## Demo Scripts
+
+Preferred module paths:
+
+```bash
+python3 -m harness.scripts.openarm_smoke
+python3 -m harness.scripts.openarm_pause_resume
+python3 -m harness.scripts.openarm_replay_watchdog
+```
+
+Backward-compatible wrappers also exist at:
+
+```bash
+python3 -m harness.openarm_smoke
+python3 -m harness.openarm_pause_resume
+python3 -m harness.openarm_replay_watchdog
+```
+
+For the tested OpenARM commands, see [RUNBOOK.md](RUNBOOK.md).
 
 Minimal OpenARM gating shape:
 
