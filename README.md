@@ -55,48 +55,59 @@ and intervene only through control surfaces the robot actually exposes.
   1-4 s, so it can't run at 30 fps. The fast layer gives instant reflexes; the VLM
   runs async so it never stalls the loop, and the overlay shows its latest verdict.
 
-## Architecture
+## Architecture Overview
 
+VIGIE is organized as a runtime safety stack around the robot, not inside the
+robot policy. Each layer can be demonstrated independently, then combined for
+the full hackathon story.
+
+```text
+External cameras
+      |
+      v
+Perception layer
+  YOLO / YOLOE segmentation, hand/person/tool detection,
+  optional MediaPipe fingertips, blade geometry via PCA
+      |
+      v
+Scene context
+  objects, detections, zones, hazards, rule hits, evidence frame ids
+      |
+      v
+Deterministic safety layer
+  PolicyEngine + RuntimeWatchdogSupervisor
+  ALLOW / BLOCK / PAUSE / STOP / RESUME
+      |
+      +----------------------------+
+      |                            |
+      v                            v
+Audit and visualization       Robot control harness
+  JSONL evidence              OpenARM / LeRobot adapter
+  live overlay                pause -> hold pose -> resume
+  Rerun timeline              recorded replay interruption
+  web dashboard
 ```
- camera ─▶ Layer 1: Perception (every frame)
-           ├─ YOLOE (open-vocab seg) → masks + classes for ANY prompted object
-           │    (knife, cleaver, stove, flame, "hand", … — edit the prompt list)
-           └─ MediaPipe → 21 hand landmarks (where wheels exist; else "hand" prompt)
-                 │
-                 ▼
-           orientation.py → blade axis / tip / angle (PCA on mask)
-                 │
-                 ▼
- Layer 1.5: Rule engine (deterministic, real-time)
-   • blade tip → nearest fingertip distance
-   • blade aim angle (is it pointing AT the hand?)
-   • fragile object fast-motion (drop risk)
-   • object near hot zone (oven/stove)
-                 │  on hit (or idle timer)
-                 ▼
- Layer 2: VLM judge (Claude vision) — GENERALIST, runs continuously, async
-   • open-vocabulary: any hazard, not a fixed list
-   • returns: dangerous? severity? category? rationale? recommended_action?
-                 │
-                 ▼
-        JSONL event log  +  live overlay  (+ kill-switch hook)
 
- OpenARM harness path:
-   LeRobot replay/action stream + watchdog scene_context
-                 │
-                 ▼
-   deterministic harness policy: ALLOW / BLOCK / PAUSE / STOP / RESUME
-                 │
-                 ▼
-   LeRobotOpenArmController: get_observation() -> send_action(current .pos)
-   hold pose while paused, resume after fresh safe frames
+### Core Runtime Loop
 
- Parallel WORLD-MODEL track (optional, --worldmodel):
-   V-JEPA 2 encodes short clips → latent space → OOD danger score
-   • learns what "normal/safe" operation looks like (no danger labels)
-   • flags moments that drift out of that distribution as surprising/unsafe
-   • live 2D PCA map: green = normal cloud, moving dot = current situation
-```
+1. **Observe**: external webcams keep running while the robot moves.
+2. **Parse**: the watchdog turns frames into a `scene_context`.
+3. **Decide**: deterministic policies decide whether motion is safe.
+4. **Intervene**: the OpenARM harness pauses, sends a hold action, and resumes
+   only after fresh safe frames.
+5. **Prove**: every decision can be logged with frame-level evidence and shown
+   in Rerun or the dashboard.
+
+### Project Tracks
+
+| Track | Purpose | Demo artifact |
+|------|---------|---------------|
+| Fast symbolic watchdog | Detect concrete hazards such as hand near sharp tool | live overlay, JSONL alerts |
+| OpenARM harness | Show safety control on real hardware or replay | pause/hold/resume during LeRobot replay |
+| Rerun visualization | Explain why the harness paused | camera feed, YOLO boxes, decision timeline |
+| Web dashboard | Presentation view for judges | synchronized feeds, logs, safety timeline |
+| V-JEPA world model | Flag out-of-distribution behavior | latent OOD panel |
+| Generative future preview | Imagine near-future risk before it happens | future strip, preventive veto |
 
 ### World-model track (V-JEPA 2 latent OOD)
 
