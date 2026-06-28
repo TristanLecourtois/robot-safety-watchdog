@@ -11,3 +11,8 @@ mobileclip*
 .textpe_cache.pt
 runs/
 .DS_Store
+
+reachy-mini-desktop-app/
+logs_test.json
+*.mp4
+dashboard_preview.png

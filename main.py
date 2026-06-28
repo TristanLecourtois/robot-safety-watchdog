@@ -17,10 +17,14 @@ def main():
     ap.add_argument("--video", type=str, default=None, help="path to a video file to analyze")
     ap.add_argument("--worldmodel", action="store_true",
                     help="enable the V-JEPA 2 latent OOD track (needs the worldmodel extra)")
+    ap.add_argument("--future", action="store_true",
+                    help="enable the generative future-preview track (GPU; needs the generative extra)")
     args = ap.parse_args()
 
     if args.worldmodel:
         cfg.CONFIG.enable_world_model = True
+    if args.future:
+        cfg.CONFIG.enable_future_preview = True
 
     if args.video:
         _run_video(args.video)
@@ -45,7 +49,7 @@ def _run_video(path: str):
         rationale, vlm_sev = wd.verdict_banner()
         sev = analysis.max_severity or vlm_sev
         overlay.draw(frame, detections, hands, analysis, rationale, sev,
-                     latent=wd.world_state())
+                     latent=wd.world_state(), future=wd.future_state())
         cv2.imshow("Robot Safety Watchdog", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break

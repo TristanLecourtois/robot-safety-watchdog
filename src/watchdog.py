@@ -44,6 +44,17 @@ class Watchdog:
                 config.wm_z_threshold, config.wm_input_size,
             )
 
+        # Optional generative future-preview track (GPU only).
+        self.future = None
+        if config.enable_future_preview:
+            from src.future_preview import (AnchorDangerScorer, FutureFramePredictor,
+                                            FuturePreviewMonitor)
+            predictor = FutureFramePredictor(config.svd_model, config.future_num_frames)
+            scorer = AnchorDangerScorer(config.anchors_dir)
+            self.future = FuturePreviewMonitor(
+                predictor, scorer, config.future_interval_s, config.future_danger_threshold,
+            )
+
     def process_frame(self, frame, now: float):
         detections = self.detector.detect(frame)
         hands = self.hands.detect(frame) if self.hands else []
@@ -63,11 +74,19 @@ class Watchdog:
             self.world.push_frame(frame)
             self.world.maybe_encode()
 
+        # Generative future-preview track (GPU): imagine the near future async.
+        if self.future is not None:
+            self.future.push_frame(frame)
+            self.future.maybe_predict(now)
+
         self._maybe_alert(analysis, self._last_verdict, facts, now)
         return detections, hands, analysis
 
     def world_state(self):
         return self.world.snapshot() if self.world is not None else None
+
+    def future_state(self):
+        return self.future.snapshot() if self.future is not None else None
 
     def _dispatch_vlm(self, frame, facts: str):
         """Run the (slow) VLM call without blocking the fast loop."""
@@ -140,7 +159,7 @@ def run_webcam(config: cfg.WatchdogConfig = cfg.CONFIG):
             rationale, vlm_sev = wd.verdict_banner()
             sev = analysis.max_severity or vlm_sev
             overlay.draw(frame, detections, hands, analysis, rationale, sev,
-                         latent=wd.world_state())
+                         latent=wd.world_state(), future=wd.future_state())
             cv2.imshow("Robot Safety Watchdog", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break

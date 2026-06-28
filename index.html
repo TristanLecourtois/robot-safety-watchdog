@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VIGIE — Robot Safety Watchdog</title>
+<style>
+  :root {
+    --bg: #eceef1;
+    --card: #ffffff;
+    --edge: #e4e7ec;
+    --ink: #1b1e25;
+    --muted: #888e99;
+    --muted2: #aeb4be;
+    --green: #5bb734;
+    --green-soft: #eaf6e3;
+    --amber: #f5a623;
+    --amber-soft: #fdf2dd;
+    --red: #e5484d;
+    --red-soft: #fceced;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --shadow: 0 1px 2px rgba(20,25,35,.04), 0 4px 16px rgba(20,25,35,.05);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 14px; }
+
+  /* ---- top nav ---- */
+  nav { height: 56px; flex: 0 0 auto; display: flex; align-items: center; gap: 26px;
+    padding: 0 22px; background: var(--card); border-bottom: 1px solid var(--edge); }
+  .logo { font-weight: 800; letter-spacing: .04em; font-size: 19px; display: flex; align-items: center; gap: 6px; }
+  .logo .v { color: var(--green); }
+  .navitems { display: flex; gap: 22px; }
+  .navitems a { color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500; display: flex; gap: 6px; align-items: center; }
+  .navitems a.active { color: var(--ink); font-weight: 600; }
+  .navitems a.active::after { content: ""; }
+  .spacer { flex: 1; }
+  /* segmented vision control + nav buttons */
+  .seg { display: flex; background: #f0f2f5; border: 1px solid var(--edge); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font-size: 12.5px; font-weight: 600;
+    padding: 6px 11px; border-radius: 7px; cursor: pointer; font-family: var(--sans); }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(20,25,35,.08); }
+  .seg button.disabled { opacity: .35; cursor: not-allowed; }
+  .navbtn { border: 1px solid var(--edge); background: #fff; color: var(--ink); font-size: 12.5px; font-weight: 600;
+    padding: 7px 12px; border-radius: 9px; cursor: pointer; font-family: var(--sans); }
+  .navbtn:hover { border-color: var(--green); color: #3c8a1f; }
+  .chip { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .chip b { color: var(--ink); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 7px rgba(91,183,52,.6); }
+  .dot.gray { background: var(--muted2); box-shadow: none; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg,#cdd3db,#aeb4be); }
+
+  /* ---- layout ---- */
+  main { flex: 1; display: grid; grid-template-columns: 1fr 392px; grid-template-rows: 1fr 246px;
+    gap: 16px; padding: 16px; min-height: 0; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 14px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .card > .hd { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--edge); }
+  .card > .hd .t { font-weight: 650; font-size: 14px; }
+  .card > .hd .sub { color: var(--muted); font-weight: 500; }
+  .card > .hd .right { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); }
+  .rec { display: flex; align-items: center; gap: 6px; color: var(--green); font-weight: 600; font-size: 12.5px; }
+  .rec i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.4s infinite; font-style: normal; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .iconbtn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--edge); color: var(--muted); display: grid; place-items: center; font-size: 13px; }
+
+  /* cameras */
+  .cams { grid-column: 1; grid-row: 1; }
+  .cams .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: #0c0d11; min-height: 0; }
+  .feed { position: relative; overflow: hidden; min-height: 0; }
+  .feed video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .feed .info { position: absolute; top: 12px; left: 12px; background: rgba(10,12,16,.62); backdrop-filter: blur(6px);
+    color: #e8eaee; font-family: var(--mono); font-size: 10.5px; line-height: 1.5; padding: 7px 10px; border-radius: 8px; }
+  .feed .name { position: absolute; bottom: 12px; left: 12px; display: flex; align-items: center; gap: 6px;
+    background: rgba(10,12,16,.6); color: #fff; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 7px; }
+  .feed .name i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 1.6s infinite; font-style: normal; }
+  .feed .danger-frame { position: absolute; inset: 0; border: 0 solid var(--red); pointer-events: none; transition: border-width .25s; }
+  .feed.alert .danger-frame { border-width: 3px; }
+  .feed canvas.fx { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+  .feed.fx-on canvas.fx { display: block; }
+  .feed .mode-tag { position: absolute; top: 12px; right: 12px; display: none; font-family: var(--mono); font-size: 10px;
+    background: rgba(10,12,16,.62); color: #e8eaee; padding: 4px 8px; border-radius: 7px; }
+  .feed.fx-on .mode-tag { display: block; }
+
+  /* modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(20,25,35,.45); backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-bg.open { display: flex; }
+  .modal { width: 440px; max-width: 92vw; background: #fff; border: 1px solid var(--edge); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(20,25,35,.25); overflow: hidden; }
+  .modal .mhd { display: flex; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--edge); font-weight: 700; font-size: 15px; }
+  .modal .mhd .x { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 18px; border: 0; background: none; }
+  .modal .mbd { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+  .modal .mft { padding: 12px 18px; border-top: 1px solid var(--edge); display: flex; justify-content: flex-end; gap: 10px; }
+  .btn-primary { background: var(--green); color: #fff; border: 0; border-radius: 9px; padding: 9px 16px; font-weight: 600; cursor: pointer; font-family: var(--sans); }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .row .lab { flex: 1; }
+  .row .lab b { display: block; font-size: 13.5px; }
+  .row .lab small { color: var(--muted); }
+  .row input[type=range] { width: 150px; accent-color: var(--green); }
+  .row .val { font-family: var(--mono); font-size: 12.5px; color: var(--muted); width: 56px; text-align: right; }
+  .lat { font-family: var(--mono); font-size: 11px; color: var(--muted); background: #f0f2f5; padding: 2px 7px; border-radius: 6px; }
+  /* toggle switch */
+  .sw { width: 40px; height: 22px; border-radius: 999px; background: #d3d7de; position: relative; cursor: pointer; transition: background .2s; flex: 0 0 auto; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .2s; }
+  .sw.on { background: var(--green); } .sw.on::after { left: 20px; }
+
+  /* frame-by-frame safety timeline */
+  .timeline { padding: 9px 14px 11px; border-top: 1px solid var(--edge); background: #fff; flex: 0 0 auto; }
+  .tlh { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-bottom: 7px; }
+  .tlh b { color: var(--ink); font-weight: 650; font-size: 12px; }
+  .tlc { margin-left: auto; display: flex; gap: 12px; font-family: var(--mono); font-weight: 700; }
+  .tlc .ok { color: #3c8a1f; } .tlc .bad { color: var(--red); }
+  .tl-bar { position: relative; height: 16px; display: flex; gap: 2px; }
+  .tl-seg { flex: 1; border-radius: 2px; background: #eef0f3; transition: background .3s; }
+  .tl-seg.safe { background: var(--green); } .tl-seg.warn { background: var(--amber); } .tl-seg.danger { background: var(--red); }
+  .tl-head { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink);
+    box-shadow: 0 0 0 2px rgba(255,255,255,.8); border-radius: 2px; transition: left .12s linear; }
+
+  /* decoded futures */
+  .futures { grid-column: 1; grid-row: 2; }
+  .futures .hd .slider { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+  .futures .hd input[type=range] { width: 120px; accent-color: var(--green); }
+  .futures .body { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px 16px; min-height: 0; }
+  .fut { position: relative; border-radius: 11px; overflow: hidden; border: 2px solid var(--edge); background: #000; min-height: 0; }
+  .fut video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+  .fut canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: auto; }
+  .fut .grid { position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(91,183,52,.10) 1px, transparent 1px), linear-gradient(90deg, rgba(91,183,52,.10) 1px, transparent 1px);
+    background-size: 18px 18px; }
+  .fut .cap { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .fut .cap .l { color: #fff; font-size: 11px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .fut .cap .h { color: #e8eaee; font-family: var(--mono); font-size: 10px; opacity: .85; }
+  .fut .pill { position: absolute; bottom: 8px; right: 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .08em;
+    padding: 3px 8px; border-radius: 999px; }
+  .fut.safe { border-color: var(--green); }
+  .fut.safe .pill { background: var(--green-soft); color: #3c8a1f; }
+  .fut.warning { border-color: var(--amber); }
+  .fut.warning .pill { background: var(--amber-soft); color: #b9791a; }
+  .fut.danger { border-color: var(--red); box-shadow: 0 0 0 1px var(--red), 0 8px 22px rgba(229,72,77,.25); }
+  .fut.danger .pill { background: var(--red-soft); color: var(--red); }
+
+  /* safety log */
+  .safety { grid-column: 2; grid-row: 1; }
+  .safety .hd .filters { margin-left: auto; display: flex; gap: 6px; }
+  .safety .hd .f { font-size: 11px; color: var(--muted); border: 1px solid var(--edge); border-radius: 7px; padding: 4px 8px; }
+  .safety .body { flex: 1; overflow: hidden; padding: 6px 0; }
+  .ev { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 11px 16px; border-bottom: 1px solid #f1f3f6;
+    opacity: 0; animation: slide .25s forwards; }
+  @keyframes slide { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+  .ev .time { grid-column: 1 / -1; font-family: var(--mono); font-size: 10.5px; color: var(--muted2); }
+  .ev .dec { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
+  .ev .dec i { width: 9px; height: 9px; border-radius: 50%; font-style: normal; }
+  .ev .desc { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .ev .score { text-align: right; font-family: var(--mono); font-size: 13px; font-weight: 700; }
+  .ev .sev { text-align: right; font-size: 10px; color: var(--muted); }
+  .ev .bar { grid-column: 2; width: 64px; height: 4px; border-radius: 3px; background: #eef0f3; margin-top: 4px; overflow: hidden; }
+  .ev .bar > span { display: block; height: 100%; border-radius: 3px; }
+  .allow .dec { color: #3c8a1f } .allow .dec i, .allow .bar>span { background: var(--green) } .allow .score { color: #3c8a1f }
+  .pause .dec { color: #b9791a } .pause .dec i, .pause .bar>span { background: var(--amber) } .pause .score { color: #b9791a }
+  .block .dec { color: var(--red) } .block .dec i, .block .bar>span { background: var(--red) } .block .score { color: var(--red) }
+  .block { background: #fdf4f4; }
+  .ev .foot { grid-column: 1 / -1; }
+  .safety .more { padding: 10px 16px; border-top: 1px solid var(--edge); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+  .safety .more b { color: var(--green); font-weight: 600; }
+
+  /* system status */
+  .status { grid-column: 2; grid-row: 2; }
+  .status .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; padding: 16px; align-content: center; }
+  .stat .k { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+  .stat .v { font-size: 18px; font-weight: 750; font-family: var(--mono); display: flex; align-items: baseline; gap: 6px; }
+  .stat .v small { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .stat .v .run { color: var(--green); } .stat .v .rev { color: var(--amber); } .stat .v .blk { color: var(--red); }
+
+  /* footer */
+  footer { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 22px; padding: 0 22px;
+    background: var(--card); border-top: 1px solid var(--edge); color: var(--muted2); font-size: 11.5px; font-family: var(--mono); }
+  footer .spacer { flex: 1; }
+</style>
+</head>
+<body>
+  <nav>
+    <div class="logo">VIGIE<span class="v">▾</span></div>
+    <div class="seg" id="vision-seg">
+      <button data-mode="rgb" class="on">RGB</button>
+      <button data-mode="seg" data-model="SAM">◧ Segmentation</button>
+      <button data-mode="depth" data-model="Depth-Anything">▦ Depth</button>
+      <button data-mode="boxes" data-model="LocateAnything">▭ Detection</button>
+    </div>
+    <button class="navbtn" id="btn-configure">⚙ Configure Robot</button>
+    <button class="navbtn" id="btn-perception">🧠 Perception Stack</button>
+    <div class="spacer"></div>
+    <div class="chip"><span class="dot"></span> System Online</div>
+    <div class="chip"><span class="dot"></span> OpenARM <b>Connected</b></div>
+    <div class="chip"><span class="dot gray"></span> LeRobot <b>v1.6.2</b></div>
+    <div class="avatar"></div>
+  </nav>
+
+  <main>
+    <!-- cameras -->
+    <section class="card cams">
+      <div class="hd">
+        <span class="t">Live Recording</span><span class="sub">· OpenARM Workspace</span>
+        <span class="rec"><i></i> REC</span>
+        <span class="right"><span class="iconbtn">⤢</span><span class="iconbtn">⋮</span></span>
+      </div>
+      <div class="body">
+        <div class="feed" id="feed-gripper">
+          <video src="gripper.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <div class="info">Camera: gripper_cam<br>Resolution: 1280×720<br>FPS: 30</div>
+          <div class="name"><i></i> GRIPPER CAM</div>
+          <div class="danger-frame"></div>
+          <div class="mode-tag"></div>
+        </div>
+        <div class="feed" id="feed-head">
+          <video src="head.mp4" autoplay muted loop playsinline preload="auto"></video><canvas class="fx"></canvas>
+          <div class="info">Camera: head_cam<br>Resolution: 640×480<br>FPS: 30</div>
+          <div class="name"><i></i> HEAD CAM</div>
+          <div class="danger-frame"></div>
+          <div class="mode-tag"></div>
+        </div>
+      </div>
+      <div class="timeline">
+        <div class="tlh">
+          <b>Frame-by-frame safety</b><span>· session_2026-06-27 · kitchen_multitask</span>
+          <span class="tlc"><span class="ok">✓ <i id="tl-ok">0</i></span><span class="bad">✗ <i id="tl-bad">0</i></span></span>
+        </div>
+        <div class="tl-bar" id="tl-bar"><div class="tl-head" id="tl-head"></div></div>
+      </div>
+    </section>
+
+    <!-- decoded futures -->
+    <section class="card futures">
+      <div class="hd">
+        <span class="t">Decoded Futures</span><span class="sub">Dreamer World Model · 3 sampled rollouts ⓘ</span>
+        <span class="slider">Horizon: <b id="hz">1.5s</b><input type="range" min="5" max="20" value="15" id="hz-range"></span>
+      </div>
+      <div class="body">
+        <div class="fut safe" id="fut-0">
+          <video src="gripper.mp4" autoplay muted loop playsinline></video><canvas></canvas><div class="grid"></div>
+          <div class="cap"><span class="l">Rollout 01</span><span class="h fhz">+1.5s</span></div>
+          <span class="pill">SAFE</span>
+        </div>
+        <div class="fut safe" id="fut-1">
+          <video src="head.mp4" autoplay muted loop playsinline></video><canvas></canvas><div class="grid"></div>
+          <div class="cap"><span class="l">Rollout 02</span><span class="h fhz">+1.5s</span></div>
+          <span class="pill">SAFE</span>
+        </div>
+        <div class="fut safe" id="fut-2">
+          <video src="gripper.mp4" autoplay muted loop playsinline></video><canvas></canvas><div class="grid"></div>
+          <div class="cap"><span class="l">Rollout 03</span><span class="h fhz">+1.5s</span></div>
+          <span class="pill">SAFE</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- safety log -->
+    <section class="card safety">
+      <div class="hd">
+        <span class="t">Safety Log</span>
+        <span class="filters"><span class="f">All Decisions ▾</span><span class="f">⛃ Filters</span><span class="f">❚❚</span></span>
+      </div>
+      <div class="body" id="log-body"></div>
+      <div class="more"><span>Showing live of <b id="evcount">0</b> events</span><span><b>View All →</b></span></div>
+    </section>
+
+    <!-- system status -->
+    <section class="card status">
+      <div class="hd"><span class="t">System Status</span></div>
+      <div class="body">
+        <div class="stat"><div class="k">Mode</div><div class="v"><span id="mode" class="run">RUNNING</span> ▸</div></div>
+        <div class="stat"><div class="k">Risk Score</div><div class="v"><span id="risk">0.21</span> <small id="risklbl">Low</small></div></div>
+        <div class="stat"><div class="k">World Model</div><div class="v" style="font-size:14px">Dreamer-v3</div></div>
+        <div class="stat"><div class="k">Frame ID</div><div class="v" id="frame">128,734</div></div>
+        <div class="stat"><div class="k">Model Latency</div><div class="v"><span id="lat">34</span> <small>ms</small></div></div>
+        <div class="stat"><div class="k">Policy</div><div class="v" style="font-size:14px">LeRobot ACT</div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>OpenARM-ID: OA-00123</span><span>Recording: session_2026-06-27</span>
+    <span>Dataset: le_robot/kitchen_multitask</span>
+    <span class="spacer"></span><span id="uptime">Uptime: 02:14:23</span><span id="clk">--:--:-- UTC</span>
+  </footer>
+
+  <!-- Configure Robot modal -->
+  <div class="modal-bg" id="modal-configure">
+    <div class="modal">
+      <div class="mhd">⚙ Configure Robot <button class="x" data-close>×</button></div>
+      <div class="mbd">
+        <div class="row"><div class="lab"><b>Safety distance</b><small>blade-tip → hand threshold</small></div>
+          <input type="range" min="40" max="200" value="90" id="cfg-dist"><span class="val" id="cfg-dist-v">90px</span></div>
+        <div class="row"><div class="lab"><b>Max speed</b><small>cap end-effector velocity</small></div>
+          <input type="range" min="10" max="100" value="60" id="cfg-speed"><span class="val" id="cfg-speed-v">60%</span></div>
+        <div class="row"><div class="lab"><b>Auto-stop on BLOCK</b><small>halt motion when a future is vetoed</small></div>
+          <div class="sw on" data-toggle></div></div>
+        <div class="row"><div class="lab"><b>Compliant mode</b><small>soft motors for teach-by-demo</small></div>
+          <div class="sw" data-toggle></div></div>
+        <div class="row"><div class="lab"><b>Policy</b><small>control policy</small></div>
+          <span class="lat">LeRobot ACT v1.6.2</span></div>
+      </div>
+      <div class="mft"><button class="btn-primary" data-close>Save & apply</button></div>
+    </div>
+  </div>
+
+  <!-- Perception Stack modal -->
+  <div class="modal-bg" id="modal-perception">
+    <div class="modal">
+      <div class="mhd">🧠 Perception Stack <button class="x" data-close>×</button></div>
+      <div class="mbd" id="perc-list">
+        <div class="row" data-model="LocateAnything" data-mode="boxes"><div class="lab"><b>LocateAnything-3B</b><small>NVIDIA · open-vocab localization</small></div><span class="lat">3B · GPU</span><div class="sw on" data-perc></div></div>
+        <div class="row" data-model="SAM" data-mode="seg"><div class="lab"><b>Segment Anything (SAM)</b><small>semantic segmentation</small></div><span class="lat">48 ms</span><div class="sw on" data-perc></div></div>
+        <div class="row" data-model="RAM"><div class="lab"><b>RAM</b><small>recognize-anything tagging</small></div><span class="lat">22 ms</span><div class="sw on" data-perc></div></div>
+        <div class="row" data-model="Depth-Anything" data-mode="depth"><div class="lab"><b>Depth-Anything v2</b><small>monocular depth</small></div><span class="lat">37 ms</span><div class="sw on" data-perc></div></div>
+        <div class="row" data-model="Dreamer-v3"><div class="lab"><b>Dreamer-v3</b><small>world model · rollouts</small></div><span class="lat">68 ms</span><div class="sw on" data-perc></div></div>
+      </div>
+      <div class="mft"><button class="btn-primary" data-close>Done</button></div>
+    </div>
+  </div>
+
+<script>
+  // ---- synchronized playback of the 2 top feeds ----
+  let master = null, curSev = null;
+  const vids = [...document.querySelectorAll(".feed video")];
+  // coordinated start: wait until both feeds can play, then start at t=0 together
+  let started = false;
+  function startFeeds() {
+    if (started) return; started = true;
+    vids.forEach((v) => { try { v.currentTime = 0; } catch (e) {} });
+    Promise.all(vids.map((v) => v.play().catch(() => {})));
+  }
+  function maybeStart() { if (!started && vids.every((v) => v.readyState >= 3)) startFeeds(); }
+  vids.forEach((v) => { v.addEventListener("canplay", maybeStart); v.addEventListener("canplaythrough", maybeStart); });
+  setTimeout(startFeeds, 2500);  // fallback: start no matter what
+  function pickMaster() {
+    if (!master && vids.every((v) => v.duration && v.readyState >= 1)) master = vids[0];
+    return !!master;
+  }
+  // gentle resync: only nudge if drift is LARGE, and rarely — no per-second seeking
+  setInterval(() => {
+    if (!master) return;
+    vids.forEach((v) => {
+      if (v === master || !v.duration) return;
+      if (v.paused) v.play().catch(() => {});
+      if (Math.abs(v.currentTime - master.currentTime) > 0.7) v.currentTime = master.currentTime;
+    });
+  }, 5000);
+  const waitMaster = setInterval(() => { if (master || pickMaster()) { clearInterval(waitMaster); initLogs(); } }, 300);
+  setTimeout(() => initLogs(), 4000);
+
+  // ---- clock / counters ----
+  const clk = document.getElementById("clk");
+  const frameEl = document.getElementById("frame");
+  let frame = 128734;
+  setInterval(() => {
+    clk.textContent = new Date().toLocaleTimeString("en-GB") + " UTC";
+    frame += 30; frameEl.textContent = frame.toLocaleString("en-US");
+    document.getElementById("lat").textContent = (30 + Math.round(Math.random() * 10));
+  }, 1000);
+
+  // ---- latent futures (red/green) ----
+  const futEls = [0, 1, 2].map((i) => document.getElementById("fut-" + i));
+  let horizonSec = 1.5;          // shared prediction horizon (from the slider)
+  window.logsData = null;        // VLM timeline, used to predict future danger
+
+  function setFut(el, lvl) {
+    el.classList.remove("safe", "warning", "danger");
+    el.classList.add(lvl);
+    el.querySelector(".pill").textContent = lvl.toUpperCase();
+  }
+  // severity the world model "expects" at a future time (from the VLM timeline)
+  function severityAt(t) {
+    const d = window.logsData;
+    if (!d || !d.length) return curSev;          // fallback to current danger
+    let sev = "info";
+    for (const e of d) { if (e.t <= t) sev = e.severity; else break; }
+    return sev === "info" ? null : sev;
+  }
+  function updateFutures() {
+    // Predict at currentTime + horizon: independent rollouts at the SAME horizon,
+    // each branch samples its own outcome -> some come out safe, some dangerous,
+    // and they flag danger BEFORE the live feed reaches it.
+    const tf = (master && master.duration) ? (master.currentTime + horizonSec) : 0;
+    const base = severityAt(tf);
+    futEls.forEach((el) => {
+      const r = Math.random();
+      let lvl;
+      if (base === "critical") lvl = r < 0.6 ? "danger" : (r < 0.85 ? "warning" : "safe");
+      else if (base === "warning") lvl = r < 0.35 ? "warning" : (r < 0.5 ? "danger" : "safe");
+      else lvl = r < 0.1 ? "warning" : "safe";
+      setFut(el, lvl);
+    });
+  }
+  setInterval(updateFutures, 1600); updateFutures();
+
+  // futures just play (autoplay/loop); the "prediction" is conveyed by the
+  // danger coloring from severityAt(currentTime + horizon) — no per-second
+  // seeking (that caused the feeds to thrash/loop).
+
+  // ---- latent "encode -> decode" reconstruction render for the 3 futures ----
+  // Downsample each frame to a small latent grid (encode), quantize + add noise
+  // (latent codes / uncertainty), then upsample with smoothing (decode). The
+  // more dangerous the predicted future, the noisier & redder the decode.
+  (function decodeFutures() {
+    const LW = 72, LH = 40;                       // latent grid size
+    const tiles = futEls.map((el) => {
+      const video = el.querySelector("video");
+      const canvas = el.querySelector("canvas");
+      canvas.width = 288; canvas.height = 160;
+      const off = document.createElement("canvas"); off.width = LW; off.height = LH;
+      return { el, video, ctx: canvas.getContext("2d"), octx: off.getContext("2d", { willReadFrequently: true }), off };
+    });
+    const W = 288, H = 160;
+    const qbez = (s, c, e, u) => { const m = 1 - u; return [m * m * s[0] + 2 * m * u * c[0] + u * u * e[0], m * m * s[1] + 2 * m * u * c[1] + u * u * e[1]]; };
+    // predicted end-effector trajectory for rollout i; bends INTO the hazard if dangerous
+    function drawTraj(ctx, el, i, ts) {
+      const lvl = el.classList.contains("danger") ? "danger" : el.classList.contains("warning") ? "warning" : "safe";
+      const col = lvl === "danger" ? "#ff4d54" : lvl === "warning" ? "#f5a623" : "#5bb734";
+      const start = [W * 0.16, H * 0.52], hazard = [W * 0.70, H * 0.50];
+      let end, ctrl;
+      if (lvl === "safe") { end = [W * 0.86, H * (0.28 + 0.22 * i)]; ctrl = [(start[0] + end[0]) / 2, start[1] - 28 - 14 * i]; }
+      else if (lvl === "warning") { end = [hazard[0] - 24, hazard[1] - 12]; ctrl = [(start[0] + end[0]) / 2, start[1] + 8]; }
+      else { end = [hazard[0], hazard[1]]; ctrl = [(start[0] + end[0]) / 2 - 8 + 6 * i, start[1] - 6]; }
+      // hazard marker (the object of concern)
+      ctx.strokeStyle = "rgba(255,77,84,.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(hazard[0] - 5, hazard[1] - 5); ctx.lineTo(hazard[0] + 5, hazard[1] + 5);
+      ctx.moveTo(hazard[0] + 5, hazard[1] - 5); ctx.lineTo(hazard[0] - 5, hazard[1] + 5); ctx.stroke();
+      // dashed predicted path
+      ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(start[0], start[1]); ctx.quadraticCurveTo(ctrl[0], ctrl[1], end[0], end[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(start[0], start[1], 4, 0, 7); ctx.fill();      // gripper origin
+      ctx.beginPath(); ctx.arc(end[0], end[1], 3, 0, 7); ctx.fill();                                 // predicted end
+      const u = ((ts / 1400) + i * 0.33) % 1, p = qbez(start, ctrl, end, u);                          // moving gripper
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    let last = 0;
+    function render(ts) {
+      if (ts - last > 70) {                        // ~14 fps is plenty (and saves CPU)
+        last = ts;
+        tiles.forEach((t, idx) => {
+          if (t.video.readyState < 2 || !t.video.videoWidth) return;
+          t.octx.drawImage(t.video, 0, 0, LW, LH); // encode: downsample to latent
+          const img = t.octx.getImageData(0, 0, LW, LH), d = img.data;
+          const danger = t.el.classList.contains("danger");
+          const N = danger ? 80 : t.el.classList.contains("warning") ? 50 : 26;  // noise grows with uncertainty
+          const STEP = 40;                          // posterize -> discrete latent codes
+          for (let i = 0; i < d.length; i += 4) {
+            for (let c = 0; c < 3; c++) {
+              let v = Math.round(d[i + c] / STEP) * STEP + (Math.random() - 0.5) * N;
+              if (danger && c === 0) v += 45;        // reddish drift
+              if (danger && c === 1) v -= 15;
+              d[i + c] = v < 0 ? 0 : v > 255 ? 255 : v;
+            }
+          }
+          t.octx.putImageData(img, 0, 0);
+          t.ctx.imageSmoothingEnabled = true;        // decode: smooth upsample
+          t.ctx.drawImage(t.off, 0, 0, W, H);
+          drawTraj(t.ctx, t.el, idx, ts);            // overlay predicted trajectory
+        });
+      }
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  })();
+
+  // horizon slider label
+  const hzR = document.getElementById("hz-range"), hz = document.getElementById("hz");
+  hzR.addEventListener("input", () => {
+    const v = (hzR.value / 10).toFixed(1) + "s";
+    hz.textContent = v;
+    horizonSec = hzR.value / 10;
+    document.querySelectorAll(".fhz").forEach((e) => (e.textContent = "+" + v));
+  });
+
+  // ---- system status reaction ----
+  function setSystem(sev) {
+    const mode = document.getElementById("mode");
+    const risk = document.getElementById("risk"), risklbl = document.getElementById("risklbl");
+    if (sev === "critical") { mode.textContent = "BLOCKED"; mode.className = "blk"; risk.textContent = (0.86 + Math.random() * 0.1).toFixed(2); risklbl.textContent = "High"; }
+    else if (sev === "warning") { mode.textContent = "REVIEW"; mode.className = "rev"; risk.textContent = (0.45 + Math.random() * 0.2).toFixed(2); risklbl.textContent = "Medium"; }
+    else { mode.textContent = "RUNNING"; mode.className = "run"; risk.textContent = (0.12 + Math.random() * 0.12).toFixed(2); risklbl.textContent = "Low"; }
+  }
+
+  // ---- safety log (VLM logs.json -> decision rows) ----
+  const body = document.getElementById("log-body");
+  const evcount = document.getElementById("evcount");
+  let decayTimer = null, total = 0;
+  const DECISION = {
+    info: { word: "ALLOW", cls: "allow", sub: "Predicted path maintains safe distance." },
+    warning: { word: "PAUSE", cls: "pause", sub: "Hazard in view. Monitoring closely." },
+    critical: { word: "BLOCK", cls: "block", sub: "Blocking motion to prevent contact." },
+  };
+  const cams = { "GRIPPER CAM": "feed-gripper", "HEAD CAM": "feed-head" };
+
+  function flagFeed(label, sev) {
+    const id = cams[label]; if (!id) return;
+    document.getElementById(id).classList.toggle("alert", sev === "critical");
+  }
+  function setStatus(sev) {
+    curSev = sev || null; setSystem(curSev);
+  }
+  function score(sev) {
+    if (sev === "critical") return 0.85 + Math.random() * 0.12;
+    if (sev === "warning") return 0.45 + Math.random() * 0.25;
+    return 0.05 + Math.random() * 0.16;
+  }
+  function emit(sev, cam, msg) {
+    const d = DECISION[sev] || DECISION.info;
+    const t = new Date().toLocaleTimeString("en-GB") + "." + String(Math.floor(Math.random() * 999)).padStart(3, "0");
+    const s = score(sev), sevName = sev === "critical" ? "High" : sev === "warning" ? "Medium" : "Low";
+    const row = document.createElement("div");
+    row.className = "ev " + d.cls;
+    row.innerHTML =
+      `<div class="time">${t}</div>` +
+      `<div><div class="dec"><i></i> ${d.word}</div><div class="desc">${msg}</div></div>` +
+      `<div><div class="score">${s.toFixed(2)}</div><div class="sev">${sevName}</div></div>` +
+      `<div class="bar"><span style="width:${Math.round(s * 100)}%"></span></div>`;
+    body.prepend(row);
+    while (body.childElementCount > 7) body.removeChild(body.lastChild);
+    total++; evcount.textContent = total;
+    if (cams[cam]) flagFeed(cam, sev);
+    if (sev !== "info") {
+      setStatus(sev); clearTimeout(decayTimer);
+      decayTimer = setTimeout(() => { setStatus(null); Object.keys(cams).forEach((c) => flagFeed(c, null)); }, 4500);
+    }
+  }
+
+  const SCRIPTED = [
+    ["info", "SYSTEM", "Trajectory clear — predicted futures safe"],
+    ["warning", "GRIPPER CAM", "Hand near blade — pausing motion"],
+    ["critical", "GRIPPER CAM", "Hand too close to blade — blocking motion"],
+    ["info", "GRIPPER CAM", "Path is safe — resuming execution"],
+    ["info", "HEAD CAM", "Trajectory clear — all predicted futures safe"],
+  ];
+  let idx = 0, logsStarted = false;
+  function fakeLoop() { const e = SCRIPTED[idx++ % SCRIPTED.length]; emit(e[0], e[1], e[2]); setTimeout(fakeLoop, 1600 + Math.random() * 1600); }
+
+  // ---- frame-by-frame safety timeline (built from the VLM logs) ----
+  const TL_N = 44, tlBar = document.getElementById("tl-bar"), tlHead = document.getElementById("tl-head");
+  const tlSegs = [];
+  for (let i = 0; i < TL_N; i++) { const s = document.createElement("div"); s.className = "tl-seg"; tlBar.insertBefore(s, tlHead); tlSegs.push(s); }
+  function buildTimeline(data) {
+    const dur = (master && master.duration) || 260, rank = { info: 0, warning: 1, critical: 2 }, cls = ["safe", "warn", "danger"];
+    const ev = new Array(TL_N).fill(null);
+    data.forEach((e) => { if (!(e.severity in rank)) return; const i = Math.max(0, Math.min(TL_N - 1, Math.floor(e.t / dur * TL_N))); ev[i] = Math.max(ev[i] ?? 0, rank[e.severity]); });
+    let last = 0, ok = 0, bad = 0, prevBad = false;
+    for (let i = 0; i < TL_N; i++) {
+      if (ev[i] != null) last = ev[i];
+      tlSegs[i].className = "tl-seg " + cls[last];
+      const isBad = last >= 2;
+      if (i === 0 || isBad !== prevBad) { if (isBad) bad++; else ok++; }
+      prevBad = isBad;
+    }
+    document.getElementById("tl-ok").textContent = ok;
+    document.getElementById("tl-bad").textContent = bad;
+  }
+  function syntheticTimeline() {
+    const a = [{ t: 0, severity: "info" }];
+    for (let t = 6; t < 240; t += Math.random() * 28 + 12) { const r = Math.random(); a.push({ t, severity: r < 0.12 ? "critical" : r < 0.4 ? "warning" : "info" }); }
+    return a;
+  }
+  setInterval(() => { if (master && master.duration) tlHead.style.left = (master.currentTime / master.duration * 100) + "%"; }, 120);
+
+  // click the timeline to scrub the whole demo to that moment
+  let logPtr = 0, logPrevT = 0;
+  function seekTo(frac) {
+    if (!master || !master.duration) return;
+    const t = Math.max(0, Math.min(0.999, frac)) * master.duration;
+    vids.forEach((v) => { if (v.duration) { try { v.currentTime = Math.min(t, v.duration - 0.1); } catch (e) {} } });
+    const d = window.logsData;
+    if (d && d.length) { let i = 0; while (i < d.length && d[i].t <= t) i++; logPtr = i; logPrevT = t; }
+    tlHead.style.left = (frac * 100) + "%";
+  }
+  tlBar.style.cursor = "pointer";
+  tlBar.addEventListener("click", (e) => { const r = tlBar.getBoundingClientRect(); seekTo((e.clientX - r.left) / r.width); });
+
+  async function initLogs() {
+    if (logsStarted) return; logsStarted = true;
+    let data = null;
+    try { const r = await fetch("logs.json", { cache: "no-store" }); if (r.ok) data = await r.json(); } catch (e) {}
+    if (!data || !data.length) { fakeLoop(); buildTimeline(syntheticTimeline()); return; }
+    data.sort((a, b) => a.t - b.t);
+    window.logsData = data;       // feed the predictive future rollouts
+    buildTimeline(data);
+    logPtr = 0; logPrevT = 0;
+    setInterval(() => {
+      if (!master) return;
+      const ct = master.currentTime;
+      if (ct < logPrevT - 0.5) logPtr = 0;
+      logPrevT = ct;
+      while (logPtr < data.length && data[logPtr].t <= ct) { const e = data[logPtr++]; emit(e.severity, e.cam, e.msg); }
+    }, 250);
+  }
+  // ===== vision modes on the 2 feeds (RGB / SAM seg / Depth / DINO boxes) =====
+  let visionMode = "rgb";
+  const SEG_PALETTE = [[34,38,52],[58,120,224],[82,200,128],[242,160,46],[214,72,200],[236,214,72]];
+  function hsl(h, s, l) {  // h 0..360 -> [r,g,b]
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    let r, g, b;
+    if (h < 60) [r, g, b] = [c, x, 0]; else if (h < 120) [r, g, b] = [x, c, 0];
+    else if (h < 180) [r, g, b] = [0, c, x]; else if (h < 240) [r, g, b] = [0, x, c];
+    else if (h < 300) [r, g, b] = [x, 0, c]; else [r, g, b] = [c, 0, x];
+    return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+  }
+  const BOXES = {
+    "feed-gripper": [[0.40, 0.30, 0.30, 0.42, "hand", 0.94], [0.52, 0.58, 0.34, 0.30, "blade", 0.97]],
+    "feed-head": [[0.30, 0.34, 0.22, 0.40, "person", 0.98], [0.55, 0.60, 0.26, 0.24, "knife", 0.91], [0.18, 0.62, 0.18, 0.20, "bowl", 0.88]],
+  };
+  const feedTiles = [...document.querySelectorAll(".feed")].map((el) => {
+    const canvas = el.querySelector("canvas.fx"); canvas.width = 480; canvas.height = 270;
+    const off = document.createElement("canvas"); off.width = 160; off.height = 90;
+    return { el, id: el.id, video: el.querySelector("video"), canvas,
+      ctx: canvas.getContext("2d"), octx: off.getContext("2d", { willReadFrequently: true }), off };
+  });
+  const segCtl = document.getElementById("vision-seg");
+  segCtl.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b || b.classList.contains("disabled")) return;
+    [...segCtl.children].forEach((x) => x.classList.toggle("on", x === b));
+    visionMode = b.dataset.mode;
+    const tag = { seg: "SAM · segmentation", depth: "Depth-Anything v2", boxes: "LocateAnything-3B" }[visionMode] || "";
+    feedTiles.forEach((t) => {
+      t.el.classList.toggle("fx-on", visionMode !== "rgb");
+      t.el.querySelector(".mode-tag").textContent = tag;
+    });
+  });
+
+  let vlast = 0;
+  function renderVision(ts) {
+    if (visionMode !== "rgb" && ts - vlast > 70) {
+      vlast = ts;
+      for (const t of feedTiles) {
+        if (t.video.readyState < 2 || !t.video.videoWidth) continue;
+        if (visionMode === "boxes") {
+          t.ctx.clearRect(0, 0, 480, 270);
+          t.ctx.lineWidth = 2; t.ctx.font = "12px ui-monospace, monospace";
+          for (const [x, y, w, h, lbl, cf] of (BOXES[t.id] || [])) {
+            const px = x * 480, py = y * 270, pw = w * 480, ph = h * 270;
+            t.ctx.strokeStyle = "#5bb734"; t.ctx.strokeRect(px, py, pw, ph);
+            const txt = `${lbl} ${cf.toFixed(2)}`, tw = t.ctx.measureText(txt).width + 10;
+            t.ctx.fillStyle = "#5bb734"; t.ctx.fillRect(px, py - 16, tw, 16);
+            t.ctx.fillStyle = "#0c0d11"; t.ctx.fillText(txt, px + 5, py - 4);
+          }
+          continue;
+        }
+        t.octx.drawImage(t.video, 0, 0, 160, 90);
+        const img = t.octx.getImageData(0, 0, 160, 90), d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const L = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+          if (visionMode === "depth") {
+            const [r, g, b] = hsl(240 - 240 * L, 0.85, 0.5);  // near=red, far=blue
+            d[i] = r; d[i + 1] = g; d[i + 2] = b;
+          } else {  // seg: flat semantic-style regions by luminance band
+            const c = SEG_PALETTE[Math.min(SEG_PALETTE.length - 1, (L * SEG_PALETTE.length) | 0)];
+            d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
+          }
+        }
+        t.octx.putImageData(img, 0, 0);
+        t.ctx.imageSmoothingEnabled = (visionMode === "depth");
+        t.ctx.drawImage(t.off, 0, 0, 480, 270);
+      }
+    }
+    requestAnimationFrame(renderVision);
+  }
+  requestAnimationFrame(renderVision);
+
+  // ===== modals + config + perception toggles =====
+  const open = (id) => document.getElementById(id).classList.add("open");
+  document.getElementById("btn-configure").onclick = () => open("modal-configure");
+  document.getElementById("btn-perception").onclick = () => open("modal-perception");
+  document.querySelectorAll(".modal-bg").forEach((bg) =>
+    bg.addEventListener("click", (e) => {
+      if (e.target === bg || e.target.hasAttribute("data-close")) bg.classList.remove("open");
+    }));
+  const bind = (sl, out, suf) => { const f = () => (out.textContent = sl.value + suf); sl.oninput = f; f(); };
+  bind(document.getElementById("cfg-dist"), document.getElementById("cfg-dist-v"), "px");
+  bind(document.getElementById("cfg-speed"), document.getElementById("cfg-speed-v"), "%");
+  document.querySelectorAll("[data-toggle]").forEach((t) => (t.onclick = () => t.classList.toggle("on")));
+  document.querySelectorAll("[data-perc]").forEach((sw) => (sw.onclick = () => {
+    sw.classList.toggle("on");
+    const row = sw.closest(".row"), mode = row.dataset.mode, on = sw.classList.contains("on");
+    if (mode) {
+      const btn = segCtl.querySelector(`button[data-mode="${mode}"]`);
+      btn.classList.toggle("disabled", !on);
+      if (!on && visionMode === mode) segCtl.querySelector('button[data-mode="rgb"]').click();
+    }
+  }));
+</script>
+</body>
+</html>

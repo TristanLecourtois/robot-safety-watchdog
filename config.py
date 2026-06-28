@@ -110,6 +110,17 @@ class WatchdogConfig:
     wm_calib_clips: int = 12       # clips of normal/safe operation to baseline
     wm_z_threshold: float = 3.0    # z-score over baseline spread -> anomaly
 
+    # --- generative future-preview track (Stable Video Diffusion) — GPU only -
+    # Off by default; enable with `--future` (needs the `generative` extra + CUDA).
+    # Imagines a short future clip from the current frame and vetoes if it looks
+    # dangerous (few-shot CLIP anchors under anchors/dangerous + anchors/safe).
+    enable_future_preview: bool = False
+    svd_model: str = "stabilityai/stable-video-diffusion-img2vid-xt"
+    future_num_frames: int = 14
+    future_interval_s: float = 6.0   # generate a new imagined future this often
+    anchors_dir: str = "anchors"
+    future_danger_threshold: float = 0.05
+
     # --- alerting ---
     alert_cooldown_s: float = 3.0  # don't spam the same alert
     log_path: str = "watchdog_events.jsonl"
