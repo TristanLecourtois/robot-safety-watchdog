@@ -1,10 +1,21 @@
-# Robot Safety Vision Watchdog
+# VIGIE: Robot Safety Watchdog
 
-An **independent, external** vision watchdog for learning-based home robots. It
-watches a robot operate (starting with the kitchen — 47% of household injuries)
-and flags dangerous situations in real time, without trusting what the robot
-*intends* to do. This is the "crash-test / SOC 2 for robotic safety" thesis made
-concrete: we don't verify the model's weights, we **measure observed behavior**.
+VIGIE is an **external runtime safety layer** for learning-based robots. It
+observes the robot and workspace through cameras, detects dangerous situations,
+logs evidence, and can interrupt a real OpenARM/LeRobot run by pausing,
+holding, and resuming the robot when the scene becomes safe again.
+
+Built for the hackathon demo, the project combines three proof points:
+
+- **See danger**: live vision detects hands, sharp tools, and unsafe spatial relations.
+- **Decide deterministically**: auditable policies turn scene evidence into
+  `ALLOW`, `BLOCK`, `PAUSE`, `STOP`, or `RESUME`.
+- **Act on hardware**: the harness can pause a recorded OpenARM replay in the
+  middle of execution, hold pose, and resume after fresh safe frames.
+
+The thesis is simple: we do not claim to certify neural policy weights. We
+measure observed behavior at runtime and provide the missing safety layer around
+robot pilots.
 
 ## Hackathon demo in one line
 
